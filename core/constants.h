@@ -19,6 +19,9 @@
 #define LEN_S3TP_HDR 6
 #define LEN_S3TP_PDU 1000
 
+#define DEFAULT_QUEUE_LENGTH 256 * MTU
+#define DEFAULT_NUM_PACKETS 256
+
 
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define MIN(a,b) (((a) > (b)) ? (a) : (b))
