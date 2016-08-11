@@ -7,7 +7,9 @@
 
 #include "utilities.h"
 
-i8 calc_checksum(const void * pdu, int len)
+i8 calc_checksum(
+		const void * pdu,
+		int len)
 {
 	i8 ret = 0;
 	int i = 0;
@@ -26,7 +28,10 @@ i8 calc_checksum(const void * pdu, int len)
 	return ret;
 }
 
-bool verify_checksum(const void * pdu, int len, i8 checksum)
+bool verify_checksum(
+		const void * pdu,
+		int len,
+		i8 checksum)
 {
 	bool ret = (calc_checksum(pdu, len) - checksum);
 	return ret;
