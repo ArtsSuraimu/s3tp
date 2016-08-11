@@ -22,6 +22,9 @@
 #define DEFAULT_QUEUE_LENGTH 256 * MTU
 #define DEFAULT_NUM_PACKETS 256
 
+#define REORDERING 0x1
+#define TYPE_SAT 0x2
+#define TYPE_GND 0x4
 
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define MIN(a,b) (((a) > (b)) ? (a) : (b))

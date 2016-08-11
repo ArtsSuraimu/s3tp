@@ -9,8 +9,7 @@
 #include <string.h>
 #include <stdio.h>
 
-qnode_t * init (
-		ssize_t * length)
+qnode_t * init_queue ()
 {
 	qnode_t* q = (qnode_t*) calloc (1, sizeof(qnode_t));
 	return q;
@@ -65,7 +64,7 @@ S3TP_PACKET* pop (
 	return pack;
 }
 
-void deinit(
+void deinit_queue(
 		qnode_t* head)
 {
 	qnode_t* ref;

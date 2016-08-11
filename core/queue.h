@@ -21,9 +21,9 @@ struct tag_mini_queue_node{
 };
 
 
-void* init (ssize_t * length);
+void* init_queue ();
 void push (qnode_t *head, S3TP_PACKET* data);
 S3TP_PACKET* pop ();
-void deinit(qnode_t* head);
+void deinit_queue(qnode_t* head);
 
 #endif /* CORE_QUEUE_H_ */
