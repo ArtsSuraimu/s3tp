@@ -37,16 +37,20 @@ int init(
 		S3TP_CALLBACK callback,
 		void* pData)
 {
+	//check consistency
 	if(rx_func == 0 || tx_func == 0)
 	{
 		return -1;
 	}
 
+
+	//process user callback
 	if(callback!=0)
 	{
 		callback(pData);
 	}
 
+	//assign parameters
 	recv = rx_func;
 	send = tx_func;
 	con_opts= options;
@@ -56,6 +60,9 @@ int init(
 		queue = init_queue();
 	}
 
+	//
 	peer_ident = (con_opts & TYPE_SAT) + (con_opts & TYPE_GND);
+
+	run = 1;
 
 }

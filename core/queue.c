@@ -11,11 +11,12 @@
 #include <pthread.h>
 #include <time.h>
 
-volatile static pthread_mutex_t q_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 qnode_t * init_queue ()
 {
 	qnode_t* q = (qnode_t*) calloc (1, sizeof(qnode_t));
+	q->q_mutex = PTHREAD_MUTEX_INITIALIZER;
 	return q;
 }
 
@@ -28,7 +29,7 @@ void push (
 	qnode_t *ref = head;
 	qnode_t * new, tmp;
 
-	pthread_mutex_lock(&q_mutex);
+	pthread_mutex_lock(&head->q_mutex);
 
 	while(1)
 	{
@@ -54,7 +55,7 @@ void push (
 	ref->next = new;
 	new->next = tmp;
 
-	pthread_mutex_unlock(&q_mutex);
+	pthread_mutex_unlock(&head->q_mutex);
 
 }
 
@@ -64,7 +65,7 @@ S3TP_PACKET* pop (
 	qnode_t* tmp;
 	S3TP_PACKET* pack;
 
-	pthread_mutex_lock(&q_mutex);
+	pthread_mutex_lock(&head->q_mutex);
 
 	//get the lowest seq packet and remove it from queue
 	tmp = head->next;
@@ -73,7 +74,7 @@ S3TP_PACKET* pop (
 
 	free(tmp);
 
-	pthread_mutex_unlock(&q_mutex);
+	pthread_mutex_unlock(&head->q_mutex);
 
 	return pack;
 }

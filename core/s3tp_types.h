@@ -37,9 +37,10 @@ typedef struct tag_s3tp_header
 	i8 direction;
 	i8 seq;
 	i8 type;
+	i16 appid;
 	i16 pdu_length;
 	i8 checksum;
-}S3TP_HEADER, * pS3TP_HEADER;
+}S3TP_HEADER;
 
 typedef struct tag_s3tp_PACKET
 {
@@ -51,6 +52,8 @@ typedef struct tag_s3tp_PACKET
 typedef void (*S3TP_CALLBACK) (void* pData);
 typedef size_t (*RAW_SEND) (SOCKET socket, const void * buffer, size_t length, int flags);
 typedef size_t (*RAW_RECV) (SOCKET socekt, char * buf, int len, int flags);
+typedef size_t (*ISR_RECV) (u8 identifier, i8 seq, const void * buffer);
+
 
 
 

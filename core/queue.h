@@ -11,11 +11,13 @@
 #define CORE_QUEUE_H_
 
 #include "s3tp_types.h"
+#include <pthread.h>
 
 typedef struct tag_mini_queue_node qnode_t;
 
 struct tag_mini_queue_node{
 	S3TP_PACKET* payload;
+	pthread_mutex_t q_mutex;
 	qnode_t * next;
 	int seq;
 };
