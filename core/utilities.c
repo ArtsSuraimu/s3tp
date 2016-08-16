@@ -7,32 +7,36 @@
 
 #include "utilities.h"
 
-i8 calc_checksum(S3TP_PACKET * pkt)
+/**
+ * Return CRC-8 of the data, using x^8 + x^2 + x + 1 polynomial.
+ */
+u8 calc_checksum(S3TP_PACKET * pkt)
 {
-	i8 ret = 0;
-	int i = 0;
-	i8* p = (i8*) pkt->pdu;
-
-	if(pkt == NULL)
-	{
-		return (-1);
+	const u8 *data = pkt->pdu;
+	unsigned crc = 0;
+	int i, j;
+	for (j = pkt->hdr.pdu_length; j; j--, data++) {
+		crc ^= (*data << 8);
+		for(i = 8; i; i--) {
+			if (crc & 0x8000)
+				crc ^= (0x1070 << 3);
+			crc <<= 1;
+		}
 	}
-
-	for(i=0;i<pkt->hdr.pdu_length;i++)
-	{
-		ret += p[i];
-	}
-
-	return (ret);
+	return (u8)(crc >> 8);
 }
 
+/**
+ * Calculate the CRC and check against stored CRC
+ */
 bool verify_checksum(S3TP_PACKET* pkt)
 {
 	bool ret = (calc_checksum(pkt) - pkt->hdr.checksum);
 	return ret;
 }
 
-i8 get_nxt_seq(int * seed)
+/*Get next available sequence number */
+u8 get_nxt_seq(int * seed)
 {
 	(*seed) ++;
 	return *seed;
