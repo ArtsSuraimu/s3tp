@@ -43,6 +43,12 @@ u8 get_nxt_seq(int * seed)
 
 }
 
+u64 get_timestamp()
+{
+	return (u64) time(0);
+}
+
+
 /**
  * Pack a custom length of payload into a packet
  * The array of packets are calloced and shall be freed

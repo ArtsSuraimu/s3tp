@@ -13,5 +13,7 @@
 
 i8 calc_checksum(const void * pdu, int len);
 bool verify_checksum(const void * pdu, int len, i8 checksum);
+u64 get_timestamp();
+
 
 #endif /* CORE_UTILITIES_H_ */
