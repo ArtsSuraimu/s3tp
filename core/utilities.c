@@ -10,20 +10,46 @@
 /**
  * Return CRC-8 of the data, using x^8 + x^2 + x + 1 polynomial.
  */
-u8 calc_checksum(S3TP_PACKET * pkt)
+
+#define CRC16 0x8005
+
+u16 gen_crc16(const u8 *data, u16 size)
 {
-	const u8 *data = pkt->pdu;
-	unsigned crc = 0;
-	int i, j;
-	for (j = pkt->hdr.pdu_length; j; j--, data++) {
-		crc ^= (*data << 8);
-		for(i = 8; i; i--) {
-			if (crc & 0x8000)
-				crc ^= (0x1070 << 3);
-			crc <<= 1;
-		}
-	}
-	return (u8)(crc >> 8);
+	u16 out = 0;
+    int bits_read = 0, bit_flag;
+
+    /* Sanity check: */
+    if(data == NULL)
+        return 0;
+
+    while(size > 0)
+    {
+        bit_flag = out >> 15;
+
+        /* Get next bit: */
+        out <<= 1;
+        out |= (*data >> (7 - bits_read)) & 1;
+
+        /* Increment bit counter: */
+        bits_read++;
+        if(bits_read > 7)
+        {
+            bits_read = 0;
+            data++;
+            size--;
+        }
+
+        /* Cycle check: */
+        if(bit_flag)
+            out ^= CRC16;
+
+    }
+    return out;
+}
+u16 calc_checksum(S3TP_PACKET * pkt)
+{
+
+	return gen_crc16(pkt->pdu, pkt->hdr.pdu_length);
 }
 
 /**

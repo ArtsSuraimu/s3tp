@@ -34,18 +34,17 @@ typedef int bool;
 #pragma pack(push, 1)
 typedef struct tag_s3tp_header
 {
-	i8 direction;
-	i8 seq;
-	i8 type;
-	i16 appid;
-	i16 pdu_length;
-	i8 checksum;
+	u16 checksum;
+	u16 seq;
+	u16 pdu_length;
+	u8 reserved;
+	u8 port;
 }S3TP_HEADER;
 
 typedef struct tag_s3tp_PACKET
 {
 	S3TP_HEADER hdr;
-	i8 pdu[LEN_S3TP_PDU];
+	u8 pdu[LEN_S3TP_PDU];
 }S3TP_PACKET, * pS3TP_PACKET;
 #pragma pack(pop)
 
