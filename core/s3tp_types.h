@@ -15,7 +15,6 @@
 #define OUT
 #define NULL 0
 
-typedef int size_t;
 typedef int SOCKET;
 
 typedef unsigned char u8;
