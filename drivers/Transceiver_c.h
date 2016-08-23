@@ -18,12 +18,20 @@ typedef struct
 	int length;
 } transceiver_msg;
 
-// Type for the callback method. When a packet is received, a method of this type is called.
+// When a packet is received, a method of this type is called.
 typedef void (*CTransceiver_CallbackRecv) (const transceiver_msg msg);
+
+// When the link state changes, a method of this type is called.
+// linkState: 0=off, 1=active
+typedef void (*CTransceiver_CallbackLinkState) (int linkState);
 
 CTransceiver* CTransceiver_create(const char* spiDevice, const char* interruptPinId);
 void CTransceiver_setCallbackRecv(CTransceiver* obj, CTransceiver_CallbackRecv cb);
+void CTransceiver_setCallbackLinkState(CTransceiver* obj, CTransceiver_CallbackLinkState cb);
 void CTransceiver_init(CTransceiver* obj);
+
+// returns: 0=off, 1=active
+int CTransceiver_getLinkState(CTransceiver* obj);
 
 // Enqueues a packet for transmission.
 void CTransceiver_sendFrame(CTransceiver* obj, transceiver_msg msg);
