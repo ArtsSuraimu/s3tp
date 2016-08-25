@@ -25,10 +25,14 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 #    README.md)
 set(SOURCE_FILES
         core/constants.h
-        core/debug.c
+        core/debug.cpp
         core/debug.h
-        core/queue.c
+        core/queue.cpp
         core/queue.h
-        core/s3tp_types.h)
+        core/s3tp_types.h
+        core/TxModule.cpp
+        core/TxModule.h
+        core/Buffer.cpp
+        core/Buffer.h)
 
 add_executable(s3tp ${SOURCE_FILES})
