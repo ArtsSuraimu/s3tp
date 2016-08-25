@@ -82,9 +82,17 @@ void push (qhead_t* root, S3TP_PACKET* data) {
 }
 
 S3TP_PACKET* peek (qhead_t* root) {
+	S3TP_PACKET * pack = NULL;
+
+	pthread_mutex_lock(&root->q_mutex);
 	qnode_t * head = root->head;
+	if (head != NULL) {
+		pack = head->payload;
+	}
+	pthread_mutex_unlock(&root->q_mutex);
+
 	//Returning payload if head is not null, otherwise return null
-	return (head != NULL) ? head->payload : NULL;
+	return pack;
 }
 
 S3TP_PACKET* pop (qhead_t* root) {
@@ -121,8 +129,7 @@ S3TP_PACKET* pop (qhead_t* root) {
 	return pack;
 }
 
-void deinit_queue(qhead_t* root)
-{
+void deinit_queue(qhead_t* root) {
 	qnode_t* ref = root->head;
 	while (ref != NULL) {
 		root->head = ref->next;
@@ -134,4 +141,12 @@ void deinit_queue(qhead_t* root)
 
 u32 computeBufferSize(qhead_t* root) {
 	return root->size * sizeof(S3TP_PACKET);
+}
+
+bool isEmpty(qhead_t * root) {
+	bool result;
+	pthread_mutex_lock(&root->q_mutex);
+	result = root->size == 0;
+	pthread_mutex_unlock(&root->q_mutex);
+	return result;
 }

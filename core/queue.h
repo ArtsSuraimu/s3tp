@@ -39,5 +39,6 @@ S3TP_PACKET* pop (qhead_t* root);
 S3TP_PACKET* peek (qhead_t* root);
 void deinit_queue (qhead_t* root);
 u32 computeBufferSize (qhead_t* root);
+bool isEmpty(qhead_t * root);
 
 #endif /* CORE_QUEUE_H_ */
