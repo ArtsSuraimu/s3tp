@@ -28,8 +28,6 @@ typedef unsigned long u64;
 typedef long long i128;
 typedef unsigned long long u128;
 
-typedef int bool;
-
 #pragma pack(push, 1)
 typedef struct tag_s3tp_header
 {
@@ -63,8 +61,6 @@ typedef void (*S3TP_CALLBACK) (void* pData);
 typedef size_t (*RAW_SEND) (SOCKET socket, const void * buffer, size_t length, int flags);
 typedef size_t (*RAW_RECV) (SOCKET socekt, char * buf, int len, int flags);
 typedef size_t (*ISR_RECV) (u8 identifier, i8 seq, const void * buffer);
-
-
 
 
 #endif /* CORE_S3TP_TYPES_H_ */
