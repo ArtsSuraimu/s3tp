@@ -5,7 +5,7 @@
  *      Author: dai
  */
 
-#include "queue.h"
+#include "PriorityQueue.h"
 #include <string.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -13,8 +13,8 @@
 
 
 
-void * init_queue () {
-	qhead_t* q = (qhead_t*) calloc(1, sizeof(qhead_t));
+PriorityQueue * init_queue () {
+	PriorityQueue* q = (PriorityQueue*) calloc(1, sizeof(PriorityQueue));
 	if (pthread_mutex_init(&q->q_mutex, NULL) != 0)
 	{
 		printf("\n mutex init failed\n");
@@ -23,8 +23,8 @@ void * init_queue () {
 	return q;
 }
 
-void push (qhead_t* root, S3TP_PACKET* data) {
-	qnode_t *ref, *newNode, *swap;
+int push (PriorityQueue* root, S3TP_PACKET* data) {
+	PriorityQueue_node *ref, *newNode, *swap;
 
 	//Enter critical section
 	pthread_mutex_lock(&root->q_mutex);
@@ -34,11 +34,11 @@ void push (qhead_t* root, S3TP_PACKET* data) {
 		printf("Queue is full, dropping packet with sequence number %d\n", data->hdr.seq);
 		//Exit critical section
 		pthread_mutex_unlock(&root->q_mutex);
-		return;
+		return QUEUE_FULL;
 	}
 
 	//Creating new node
-	newNode = (qnode_t*) calloc(1, sizeof(qnode_t));
+	newNode = (PriorityQueue_node*) calloc(1, sizeof(PriorityQueue_node));
 	newNode->seq = data->hdr.seq;
 	newNode->payload = data;
 
@@ -79,13 +79,15 @@ void push (qhead_t* root, S3TP_PACKET* data) {
 
 	//Exit critical section
 	pthread_mutex_unlock(&root->q_mutex);
+
+	return 0;
 }
 
-S3TP_PACKET* peek (qhead_t* root) {
+S3TP_PACKET* peek (PriorityQueue* root) {
 	S3TP_PACKET * pack = NULL;
 
 	pthread_mutex_lock(&root->q_mutex);
-	qnode_t * head = root->head;
+	PriorityQueue_node * head = root->head;
 	if (head != NULL) {
 		pack = head->payload;
 	}
@@ -95,8 +97,8 @@ S3TP_PACKET* peek (qhead_t* root) {
 	return pack;
 }
 
-S3TP_PACKET* pop (qhead_t* root) {
-	qnode_t* ref;
+S3TP_PACKET* pop (PriorityQueue* root) {
+	PriorityQueue_node* ref;
 	S3TP_PACKET* pack;
 
 	//Entering critical section
@@ -129,8 +131,8 @@ S3TP_PACKET* pop (qhead_t* root) {
 	return pack;
 }
 
-void deinit_queue(qhead_t* root) {
-	qnode_t* ref = root->head;
+void deinit_queue(PriorityQueue* root) {
+	PriorityQueue_node* ref = root->head;
 	while (ref != NULL) {
 		root->head = ref->next;
 		free(ref);
@@ -139,11 +141,11 @@ void deinit_queue(qhead_t* root) {
 	free(root);
 }
 
-u32 computeBufferSize(qhead_t* root) {
+u32 computeBufferSize(PriorityQueue* root) {
 	return root->size * sizeof(S3TP_PACKET);
 }
 
-bool isEmpty(qhead_t * root) {
+bool isEmpty(PriorityQueue * root) {
 	bool result;
 	pthread_mutex_lock(&root->q_mutex);
 	result = root->size == 0;
