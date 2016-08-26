@@ -11,6 +11,7 @@
 #include "debug.h"
 #include "TxModule.h"
 #include <unistd.h>
+#include "SimpleQueue.h"
 
 int hexdump(const unsigned char *buffer, ssize_t len)
 {
@@ -32,7 +33,7 @@ int hexdump(const unsigned char *buffer, ssize_t len)
 }
 
 void queueTest() {
-	qhead_t * root = (qhead_t *) init_queue();
+	PriorityQueue * root = (PriorityQueue *) init_queue();
 	S3TP_PACKET * pack;
 	for (u16 i=1050; i>750; i--) {
 		pack = (S3TP_PACKET *) calloc(1, sizeof(S3TP_PACKET));
@@ -116,21 +117,36 @@ void * publisherRoutine(void * arg) {
 }
 
 void txModuleTest() {
-	TxModule * tx = TxModule::Instance();
+	TxModule tx;
 	Buffer * buffer = new Buffer();
-	tx->startRoutine(buffer);
+	tx.startRoutine(buffer, NULL);
 	pthread_t publisherThread1;
 	pthread_t publisherThread2;
 	pthread_create(&publisherThread1, NULL, publisherRoutine, buffer);
 	pthread_create(&publisherThread2, NULL, publisherRoutine, buffer);
 	u16 sleepSeconds = 15;
 	sleep(sleepSeconds);
-	tx->stopRoutine();
+	tx.stopRoutine();
 	sleep(5);
+}
+
+void simpleQueueTest() {
+	SimpleQueue<RawData> testQueue(3);
+	for (u8 i=10; i<15; i++) {
+		if (testQueue.push(RawData(NULL, 0, i, i)) == SIMPLE_QUEUE_FULL) {
+			printf("Data for port %d not inserted. Queue full\n", i);
+		}
+	}
+
+	while (!testQueue.isEmpty()) {
+		printf("Popped data for port %d\n", testQueue.pop().port);
+	}
 }
 
 int main(int argc, char**argv) {
 	srand(time(NULL));
 	//queueTest();
-	txModuleTest();
+	//txModuleTest();
+	simpleQueueTest();
+	printf("Size of S3TP Packet: %d\n", sizeof(S3TP_PACKET));
 }
