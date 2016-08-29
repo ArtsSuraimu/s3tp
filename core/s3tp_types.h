@@ -40,6 +40,19 @@ typedef struct tag_s3tp_header
 	u16 pdu_length;
 	u8 seq_port;		/* used for reordering */
 	u8 port;
+
+	//Fragmentation bit functions (bit is the most significant bit of the port variable)
+	u8 moreFragments() {
+		return (u8)((port >> 7) & 1);
+	}
+
+	void setMoreFragments() {
+		port |= 1 << 7;
+	}
+
+	void unsetMoreFragments() {
+		port &= ~(1 << 7);
+	}
 }S3TP_HEADER;
 
 typedef struct tag_s3tp_PACKET
