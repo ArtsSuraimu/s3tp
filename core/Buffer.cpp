@@ -12,7 +12,7 @@ Buffer::Buffer() {
 //Dtor
 Buffer::~Buffer() {
     pthread_mutex_lock(&buffer_mutex);
-    for (std::map<int, qhead_t *>::iterator it = queues.begin(); it != queues.end(); ++it) {
+    for (std::map<int, PriorityQueue *>::iterator it = queues.begin(); it != queues.end(); ++it) {
         delete it->second;
     }
     queues.clear();
@@ -22,57 +22,62 @@ Buffer::~Buffer() {
 }
 
 bool Buffer::packetsAvailable() {
-    return !message_map.empty();
+    pthread_mutex_lock(&buffer_mutex);
+    bool result = message_map.empty();
+    pthread_mutex_unlock(&buffer_mutex);
+    return result;
 }
 
-int Buffer::write(int port, S3TP_PACKET * data) {
+int Buffer::write(S3TP_PACKET_WRAPPER * packet) {
     pthread_mutex_lock(&buffer_mutex);
-    qhead_t * queue = queues[port];
+    int port = packet->pkt->hdr.port;
+
+    PriorityQueue * queue = queues[port];
     if (queue == NULL) {
         //Adding new queue to the internal map
-        queue = new qhead_t();
+        queue = init_queue();
         queues[port] = queue;
     }
-    push(queue, data);
+    push(queue, packet);
     message_map[port] = queue->size;
-    printf("Port %d: packet %d written\n", port, data->hdr.seq);
+    printf("Port %d: packet %d written\n", port, packet->pkt->hdr.seq);
     pthread_cond_signal(&new_content_cond);
     pthread_mutex_unlock(&buffer_mutex);
     return 0;
 }
 
-qhead_t * Buffer::getQueue(int port) {
+PriorityQueue * Buffer::getQueue(int port) {
     pthread_mutex_lock(&buffer_mutex);
-    qhead_t * queue = queues[port];
+    PriorityQueue * queue = queues[port];
     pthread_mutex_unlock(&buffer_mutex);
     return queue;
 }
 
-S3TP_PACKET * Buffer::getNextPacket(int port) {
+S3TP_PACKET_WRAPPER * Buffer::getNextPacket(int port) {
     pthread_mutex_lock(&buffer_mutex);
-    S3TP_PACKET * packet = popPacketInternal(port);
+    S3TP_PACKET_WRAPPER * packet = popPacketInternal(port);
     pthread_mutex_unlock(&buffer_mutex);
     return packet;
 }
 
-S3TP_PACKET * Buffer::getNextAvailablePacket() {
+S3TP_PACKET_WRAPPER * Buffer::getNextAvailablePacket() {
     pthread_mutex_lock(&buffer_mutex);
     if (message_map.empty()) {
         pthread_mutex_unlock(&buffer_mutex);
         return NULL;
     }
     std::map<int, int>::iterator it = message_map.begin();
-    S3TP_PACKET * packet = popPacketInternal(it->first);
+    S3TP_PACKET_WRAPPER * packet = popPacketInternal(it->first);
     pthread_mutex_unlock(&buffer_mutex);
     return packet;
 }
 
-S3TP_PACKET * Buffer::popPacketInternal(int port) {
-    qhead_t * queue = queues[port];
+S3TP_PACKET_WRAPPER * Buffer::popPacketInternal(int port) {
+    PriorityQueue * queue = queues[port];
     if (queue == NULL || isEmpty(queue)) {
         return NULL;
     }
-    S3TP_PACKET * packet = pop(queue);
+    S3TP_PACKET_WRAPPER * packet = pop(queue);
     if (isEmpty(queue)) {
         message_map.erase(port);
     } else {

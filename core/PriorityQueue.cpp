@@ -12,7 +12,6 @@
 #include <time.h>
 
 
-
 PriorityQueue * init_queue () {
 	PriorityQueue* q = (PriorityQueue*) calloc(1, sizeof(PriorityQueue));
 	if (pthread_mutex_init(&q->q_mutex, NULL) != 0)
@@ -23,8 +22,9 @@ PriorityQueue * init_queue () {
 	return q;
 }
 
-int push (PriorityQueue* root, S3TP_PACKET* data) {
+int push (PriorityQueue* root, S3TP_PACKET_WRAPPER* packet) {
 	PriorityQueue_node *ref, *newNode, *swap;
+	S3TP_PACKET * data = packet->pkt;
 
 	//Enter critical section
 	pthread_mutex_lock(&root->q_mutex);
@@ -39,8 +39,7 @@ int push (PriorityQueue* root, S3TP_PACKET* data) {
 
 	//Creating new node
 	newNode = (PriorityQueue_node*) calloc(1, sizeof(PriorityQueue_node));
-	newNode->seq = data->hdr.seq;
-	newNode->payload = data;
+	newNode->payload = packet;
 
 	//Inserting new node inside the priority queue
 	ref = root->tail;
@@ -51,7 +50,8 @@ int push (PriorityQueue* root, S3TP_PACKET* data) {
 			root->tail = newNode;
 			break;
 		}
-		else if (ref->seq < data->hdr.seq) {
+			//TODO: implement properly, with correct seq check
+		else if (ref->payload->pkt->hdr.seq < data->hdr.seq) {
 			//New node has higher sequence number than current element. New node has lower priority -> append it here
 			swap = ref->next;
 			ref->next = newNode;
@@ -83,8 +83,8 @@ int push (PriorityQueue* root, S3TP_PACKET* data) {
 	return 0;
 }
 
-S3TP_PACKET* peek (PriorityQueue* root) {
-	S3TP_PACKET * pack = NULL;
+S3TP_PACKET_WRAPPER* peek (PriorityQueue* root) {
+	S3TP_PACKET_WRAPPER * pack = NULL;
 
 	pthread_mutex_lock(&root->q_mutex);
 	PriorityQueue_node * head = root->head;
@@ -97,9 +97,9 @@ S3TP_PACKET* peek (PriorityQueue* root) {
 	return pack;
 }
 
-S3TP_PACKET* pop (PriorityQueue* root) {
+S3TP_PACKET_WRAPPER* pop (PriorityQueue* root) {
 	PriorityQueue_node* ref;
-	S3TP_PACKET* pack;
+	S3TP_PACKET_WRAPPER* pack;
 
 	//Entering critical section
 	pthread_mutex_lock(&root->q_mutex);

@@ -29,16 +29,15 @@ struct tag_s3tp_queue_root {
 };
 
 struct tag_s3tp_queue_node {
-	S3TP_PACKET* payload;
+	S3TP_PACKET_WRAPPER * payload;
 	PriorityQueue_node * next;
 	PriorityQueue_node * prev;
-	int seq;
 };
 
 PriorityQueue * init_queue ();
-int push (PriorityQueue *root, S3TP_PACKET* data);
-S3TP_PACKET* pop (PriorityQueue* root);
-S3TP_PACKET* peek (PriorityQueue* root);
+int push (PriorityQueue *root, S3TP_PACKET_WRAPPER* packet);
+S3TP_PACKET_WRAPPER* pop (PriorityQueue* root);
+S3TP_PACKET_WRAPPER* peek (PriorityQueue* root);
 void deinit_queue (PriorityQueue* root);
 u32 computeBufferSize (PriorityQueue* root);
 bool isEmpty(PriorityQueue * root);
