@@ -27,12 +27,15 @@ set(SOURCE_FILES
         core/constants.h
         core/debug.cpp
         core/debug.h
-        core/queue.cpp
-        core/queue.h
+        core/PriorityQueue.cpp
+        core/PriorityQueue.h
         core/s3tp_types.h
         core/TxModule.cpp
         core/TxModule.h
         core/Buffer.cpp
-        core/Buffer.h)
+        core/Buffer.h
+        core/s3tp_main.cpp
+        core/s3tp_main.h
+        core/SimpleQueue.h)
 
 add_executable(s3tp ${SOURCE_FILES})
