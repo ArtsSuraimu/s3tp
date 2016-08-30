@@ -132,12 +132,15 @@ S3TP_PACKET_WRAPPER* pop (PriorityQueue* root) {
 }
 
 void deinit_queue(PriorityQueue* root) {
+	pthread_mutex_lock(&root->q_mutex);
 	PriorityQueue_node* ref = root->head;
 	while (ref != NULL) {
 		root->head = ref->next;
 		free(ref);
 		ref = root->head;
 	}
+	pthread_mutex_unlock(&root->q_mutex);
+	pthread_mutex_destroy(&root->q_mutex);
 	free(root);
 }
 

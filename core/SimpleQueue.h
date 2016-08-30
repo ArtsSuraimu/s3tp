@@ -44,7 +44,7 @@ struct tag_s3tp_raw_data {
 };
 
 /*
- * Simple Queue
+ *
  */
 template <typename T>
 struct tag_s3tp_simple_queue_node {
@@ -140,10 +140,12 @@ bool SimpleQueue<T>::isEmpty() {
 template <typename T>
 T& SimpleQueue<T>::pop() {
     pthread_mutex_lock(&q_mutex);
-    if (mode == SIMPLE_QUEUE_BLOCKING) {
-        pthread_cond_wait(&content_add_cond, &q_mutex);
-    } else {
-        assert(head != NULL);
+    if (size == 0) {
+        if (mode == SIMPLE_QUEUE_BLOCKING) {
+            pthread_cond_wait(&content_add_cond, &q_mutex);
+        } else {
+            assert(head != NULL);
+        }
     }
 
     tag_s3tp_simple_queue_node<T> * node = head;
