@@ -10,8 +10,6 @@
 
 class Buffer {
 public:
-    pthread_cond_t new_content_cond;
-
     Buffer();
     ~Buffer();
     bool packetsAvailable();
@@ -22,7 +20,7 @@ public:
 
 private:
     std::map<int, PriorityQueue*> queues;
-    std::map<int, int> message_map;
+    std::map<int, int> packet_counter;
 
     pthread_mutex_t buffer_mutex;
 

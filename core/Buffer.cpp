@@ -6,7 +6,6 @@
 
 //Ctor
 Buffer::Buffer() {
-    pthread_cond_init(&new_content_cond, NULL);
 }
 
 //Dtor
@@ -16,14 +15,15 @@ Buffer::~Buffer() {
         delete it->second;
     }
     queues.clear();
-    message_map.clear();
-    pthread_cond_destroy(&new_content_cond);
+    packet_counter.clear();
+    pthread_mutex_unlock(&buffer_mutex);
     pthread_mutex_destroy(&buffer_mutex);
 }
 
 bool Buffer::packetsAvailable() {
     pthread_mutex_lock(&buffer_mutex);
-    bool result = message_map.empty();
+    //Packets are available if message map is not empty
+    bool result = !packet_counter.empty();
     pthread_mutex_unlock(&buffer_mutex);
     return result;
 }
@@ -39,9 +39,8 @@ int Buffer::write(S3TP_PACKET_WRAPPER * packet) {
         queues[port] = queue;
     }
     push(queue, packet);
-    message_map[port] = queue->size;
-    printf("Port %d: packet %d written\n", port, packet->pkt->hdr.seq);
-    pthread_cond_signal(&new_content_cond);
+    packet_counter[port] = queue->size;
+    printf("Port %d: packet %d written (%d bytes)\n", (port & 0x7F), packet->pkt->hdr.seq, packet->pkt->hdr.pdu_length);
     pthread_mutex_unlock(&buffer_mutex);
     return 0;
 }
@@ -62,11 +61,11 @@ S3TP_PACKET_WRAPPER * Buffer::getNextPacket(int port) {
 
 S3TP_PACKET_WRAPPER * Buffer::getNextAvailablePacket() {
     pthread_mutex_lock(&buffer_mutex);
-    if (message_map.empty()) {
+    if (packet_counter.empty()) {
         pthread_mutex_unlock(&buffer_mutex);
         return NULL;
     }
-    std::map<int, int>::iterator it = message_map.begin();
+    std::map<int, int>::iterator it = packet_counter.begin();
     S3TP_PACKET_WRAPPER * packet = popPacketInternal(it->first);
     pthread_mutex_unlock(&buffer_mutex);
     return packet;
@@ -79,9 +78,9 @@ S3TP_PACKET_WRAPPER * Buffer::popPacketInternal(int port) {
     }
     S3TP_PACKET_WRAPPER * packet = pop(queue);
     if (isEmpty(queue)) {
-        message_map.erase(port);
+        packet_counter.erase(port);
     } else {
-        message_map[port] = queue->size;
+        packet_counter[port] = queue->size;
     }
     return packet;
 }
