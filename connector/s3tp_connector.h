@@ -1,0 +1,35 @@
+//
+// Created by Lorenzo Donini on 30/08/16.
+//
+
+#ifndef S3TP_S3TP_CONNECTOR_H
+#define S3TP_S3TP_CONNECTOR_H
+
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <cstring>
+#include <unistd.h>
+#include "s3tp_shared.h"
+#include <pthread.h>
+
+class s3tp_connector {
+public:
+    s3tp_connector();
+    int init(S3TP_CONFIG config, S3TP_CALLBACK callback);
+    int send(const void * data, size_t len);
+    void closeConnection();
+private:
+    int socketDescriptor;
+    bool connected;
+    pthread_mutex_t connector_mutex;
+    pthread_t listener_thread;
+    S3TP_CONFIG config;
+    S3TP_CALLBACK callback;
+
+    void asyncListener();
+    static void * staticAsyncListener(void * args);
+};
+
+#endif //S3TP_S3TP_CONNECTOR_H
