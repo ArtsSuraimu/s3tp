@@ -26,7 +26,6 @@ private:
     pthread_mutex_t s3tp_mutex;
 
     bool active;
-    bool isActive();
 
     SimpleQueue<RawData> * fragmentation_q;
     pthread_cond_t frag_cond;

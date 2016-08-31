@@ -6,6 +6,7 @@
 
 //Ctor
 Buffer::Buffer() {
+    pthread_mutex_init(&buffer_mutex, NULL);
 }
 
 //Dtor
@@ -40,7 +41,7 @@ int Buffer::write(S3TP_PACKET_WRAPPER * packet) {
     }
     push(queue, packet);
     packet_counter[port] = queue->size;
-    printf("Port %d: packet %d written (%d bytes)\n", (port & 0x7F), packet->pkt->hdr.seq, packet->pkt->hdr.pdu_length);
+    printf("BUFFER port %d: packet %d written (%d bytes)\n", (port & 0x7F), packet->pkt->hdr.seq, packet->pkt->hdr.pdu_length);
     pthread_mutex_unlock(&buffer_mutex);
     return 0;
 }

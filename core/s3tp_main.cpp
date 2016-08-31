@@ -19,9 +19,12 @@ int s3tp_main::init() {
     pthread_mutex_init(&s3tp_mutex, NULL);
     pthread_mutex_lock(&s3tp_mutex);
     active = true;
+    tx.startRoutine(NULL);
     pthread_cond_init(&frag_cond, NULL);
     pthread_create(&fragmentation_thread, NULL, &s3tp_main::staticFragmentationRoutine, this);
-    printf("Fragmentation Thread: START\n");
+    __uint64_t id;
+    pthread_threadid_np(fragmentation_thread, &id);
+    printf("Fragmentation Thread (id %lld): START\n", id);
     //TODO: implement assembly thread as well
     pthread_mutex_unlock(&s3tp_mutex);
 
@@ -43,19 +46,15 @@ int s3tp_main::stop() {
     return CODE_SUCCESS;
 }
 
-bool s3tp_main::isActive() {
-    pthread_mutex_lock(&s3tp_mutex);
-    bool result = active;
-    pthread_mutex_unlock(&s3tp_mutex);
-    return result;
-}
-
 int s3tp_main::send(u8 channel, u8 port, void * data, size_t len) {
     /* As messages should still be sent out sequentially,
      * we're putting all of them into the fragmentation queue.
      * Fragmentation thread will then be in charge of checking
      * whether the message needs fragmentation or not */
-    if (isActive()) {
+    pthread_mutex_lock(&s3tp_mutex);
+    bool isActive = active;
+    pthread_mutex_unlock(&s3tp_mutex);
+    if (isActive) {
         if (len > DEFAULT_MAX_PDU_LENGTH) {
             //Drop packet and return error
             return CODE_ERROR_MAX_MESSAGE_SIZE;

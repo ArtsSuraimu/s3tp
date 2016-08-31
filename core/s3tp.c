@@ -7,7 +7,7 @@
 #include <pthread.h>
 
 #include "s3tp.h"
-#include "queue.h"
+#include "PriorityQueue.h"
 
 static pthread_t thdRx;
 static pthread_t thdTx;

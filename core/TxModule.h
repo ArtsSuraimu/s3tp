@@ -9,8 +9,9 @@
 #include "Buffer.h"
 #include <map>
 
-#define TX_PARAM_RECOVERY = 0x01
-#define TX_PARAM_CUSTOM = 0x02
+#define TX_PARAM_RECOVERY 0x01
+#define TX_PARAM_CUSTOM 0x02
+#define CODE_INACTIVE_ERROR -1
 
 class TxModule {
 public:
