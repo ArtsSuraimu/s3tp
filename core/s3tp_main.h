@@ -21,18 +21,16 @@ public:
     int send(u8 channel, u8 port, void * data, size_t len);
 
 private:
-    pthread_t fragmentation_thread;
     pthread_t assembly_thread;
     pthread_mutex_t s3tp_mutex;
 
     bool active;
 
-    SimpleQueue<RawData> * fragmentation_q;
-    pthread_cond_t frag_cond;
+    pthread_cond_t assembly_cond;
     //TxModule
     TxModule tx;
-    void fragmentationRoutine();
-    static void * staticFragmentationRoutine(void * args);
+    int fragmentPayload(u8 channel, u8 port, void * data, size_t len);
+    int sendSimplePayload(u8 channel, u8 port, void * data, size_t len);
     //RxModule
     void assemblyRoutine();
     static void * staticAssemblyRoutine(void * args);
