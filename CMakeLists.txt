@@ -40,6 +40,8 @@ set(SOURCE_FILES
         core/SimpleQueue.h
         core/s3tp_daemon.cpp
         core/s3tp_daemon.h
+        core/utilities.h
+        core/utilities.cpp
         core/client.cpp
         core/client.h connector/s3tp_shared.cpp)
 
