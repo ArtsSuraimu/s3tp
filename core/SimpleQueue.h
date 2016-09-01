@@ -10,41 +10,15 @@
 #include <assert.h>
 
 #define SIMPLE_QUEUE_DEFAULT_CAPACITY 256
+
 #define SIMPLE_QUEUE_BLOCKING 1
 #define SIMPLE_QUEUE_NON_BLOCKING 0
+
 #define SIMPLE_QUEUE_FULL -1
 #define SIMPLE_QUEUE_PUSH_SUCCESS 0
 
-typedef struct tag_s3tp_raw_data RawData;
-
-struct tag_s3tp_raw_data {
-    void * data;
-    size_t len;
-    u8 port;
-    u8 channel;
-
-    //Default ctor
-    tag_s3tp_raw_data() {}
-
-    //Custom ctor
-    tag_s3tp_raw_data(void * data, size_t len, u8 port, u8 channel) {
-        this->data = data;
-        this->len = len;
-        this->port = port;
-        this->channel = channel;
-    }
-
-    //Copy ctor
-    tag_s3tp_raw_data(const tag_s3tp_raw_data& data) {
-        this->data = data.data;
-        this->len = data.len;
-        this->port = data.port;
-        this->channel = data.channel;
-    }
-};
-
 /*
- *
+ * STRUCT DEFINITION
  */
 template <typename T>
 struct tag_s3tp_simple_queue_node {
