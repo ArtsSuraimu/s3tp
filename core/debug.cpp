@@ -10,7 +10,7 @@
 #include <time.h>
 #include "debug.h"
 #include <unistd.h>
-#include "s3tp_main.h"
+#include "s3tp_daemon.h"
 
 int hexdump(const unsigned char *buffer, ssize_t len)
 {
@@ -189,8 +189,7 @@ void s3tpMainModuleTest() {
 	pthread_create(&appThread2, NULL, applicationRoutine, &main);
 	pthread_join(appThread1, NULL);
 	pthread_join(appThread2, NULL);
-	printf("Joined..\n");
-	sleep(10);
+	sleep(5);
 	main.stop();
 }
 
@@ -207,10 +206,20 @@ void simpleQueueTest() {
 	}
 }
 
+void daemonTest() {
+	s3tp_daemon testDaemon;
+	int result = testDaemon.init();
+	if (result != 0) {
+		printf("Exiting..\n");
+	}
+	testDaemon.startDaemon();
+}
+
 int main(int argc, char**argv) {
 	srand(time(NULL));
 	//queueTest();
 	//txModuleTest();
 	//simpleQueueTest();
-	s3tpMainModuleTest();
+	//s3tpMainModuleTest();
+	daemonTest();
 }

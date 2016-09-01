@@ -18,8 +18,7 @@ static int peer_ident;
 static int con_opts;
 static int run;
 
-void cleanup (
-		int sig)
+void cleanup (int sig)
 {
 	fprintf(stderr,"\nReceived signal %d. Shutting down...\n",sig);
 	run = 0;
