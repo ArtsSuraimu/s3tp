@@ -13,12 +13,12 @@
 
 #define CRC16 0x8005
 
-u16 gen_crc16(const u8 *data, u16 size)
+/*u16 gen_crc16(const u8 *data, u16 size)
 {
 	u16 out = 0;
     int bits_read = 0, bit_flag;
 
-    /* Sanity check: */
+    /* Sanity check:
     if(data == NULL)
         return 0;
 
@@ -26,11 +26,11 @@ u16 gen_crc16(const u8 *data, u16 size)
     {
         bit_flag = out >> 15;
 
-        /* Get next bit: */
+        /* Get next bit:
         out <<= 1;
         out |= (*data >> (7 - bits_read)) & 1;
 
-        /* Increment bit counter: */
+        /* Increment bit counter:
         bits_read++;
         if(bits_read > 7)
         {
@@ -39,27 +39,74 @@ u16 gen_crc16(const u8 *data, u16 size)
             size--;
         }
 
-        /* Cycle check: */
+        /* Cycle check:
         if(bit_flag)
             out ^= CRC16;
 
     }
     return out;
-}
-u16 calc_checksum(S3TP_PACKET * pkt)
-{
+}*/
 
-	return gen_crc16(pkt->pdu, pkt->hdr.pdu_length);
+uint16_t calc_checksum(const char *data, uint16_t size)
+{
+	uint16_t out = 0;
+	int bits_read = 0, bit_flag;
+
+	/* Sanity check: */
+	if(data == NULL)
+		return 0;
+
+	while(size > 0)
+	{
+		bit_flag = out >> 15;
+
+		/* Get next bit: */
+		out <<= 1;
+		out |= (*data >> bits_read) & 1; // item a) work from the least significant bits
+
+		/* Increment bit counter: */
+		bits_read++;
+		if(bits_read > 7)
+		{
+			bits_read = 0;
+			data++;
+			size--;
+		}
+
+		/* Cycle check: */
+		if(bit_flag)
+			out ^= CRC16;
+
+	}
+
+	// item b) "push out" the last 16 bits
+	int i;
+	for (i = 0; i < 16; ++i) {
+		bit_flag = out >> 15;
+		out <<= 1;
+		if(bit_flag)
+			out ^= CRC16;
+	}
+
+	// item c) reverse the bits
+	uint16_t crc = 0;
+	i = 0x8000;
+	int j = 0x0001;
+	for (; i != 0; i >>=1, j <<= 1) {
+		if (i & out) crc |= j;
+	}
+
+	return crc;
+}
+
+bool verify_checksum(const char *data, uint16_t len, uint16_t checksum) {
+	uint16_t crc = calc_checksum(data, len);
+	return checksum == crc;
 }
 
 /**
  * Calculate the CRC and check against stored CRC
  */
-bool verify_checksum(S3TP_PACKET* pkt)
-{
-	bool ret = (calc_checksum(pkt) - pkt->hdr.checksum);
-	return ret;
-}
 
 /*Get next available sequence number */
 u8 get_nxt_seq(int * seed)
@@ -69,10 +116,10 @@ u8 get_nxt_seq(int * seed)
 
 }
 
-u64 get_timestamp()
+/*u64 get_timestamp()
 {
 	return (u64) time(0);
-}
+}*/
 
 
 /**
@@ -80,7 +127,7 @@ u64 get_timestamp()
  * The array of packets are calloced and shall be freed
  * after use. This is at responsibility of sender.
  */
-ssize_t pack_packets(
+/*ssize_t pack_packets(
 		const void * payload,
 		ssize_t len,
 		i8 direction,
@@ -116,13 +163,13 @@ ssize_t pack_packets(
 	}
 
 	return (ssize_t) pCount;
-}
+}*/
 
 /**
  * Unpack packets into a single buffer
  * assume the buffer is already given.
  */
-ssize_t unpack_packets(
+/*ssize_t unpack_packets(
 		const void * payload,
 		int count,
 		i8 direction,
@@ -153,4 +200,4 @@ ssize_t unpack_packets(
 		len += packets[i]->hdr.pdu_length;
 	}
 	return len;
-}
+}*/

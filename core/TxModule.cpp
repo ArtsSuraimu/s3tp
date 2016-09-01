@@ -116,6 +116,9 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet, int frag_no, bool more_fragmen
     //Increasing port sequence
     packet->hdr.seq_port = port_sequence[packet->hdr.port]++;
     pthread_mutex_unlock(&tx_mutex);
+    
+    //i8 crc = calc_checksum(packet->pdu, packet->hdr.pdu_length);
+
     //TODO: compute CRC
     S3TP_PACKET_WRAPPER * wrapper = new S3TP_PACKET_WRAPPER();
     wrapper->pkt = packet;
@@ -123,6 +126,6 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet, int frag_no, bool more_fragmen
     outBuffer.write(wrapper);
     pthread_cond_signal(&tx_cond);
 
-    return 0;
+    return CODE_SUCCESS;
 }
 

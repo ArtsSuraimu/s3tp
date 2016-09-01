@@ -10,10 +10,9 @@
 
 #include "s3tp_types.h"
 
-
-i8 calc_checksum(const void * pdu, int len);
-bool verify_checksum(const void * pdu, int len, i8 checksum);
-u64 get_timestamp();
+uint16_t calc_checksum(const char *data, uint16_t size);
+bool verify_checksum(const char *data, uint16_t len, uint16_t checksum);
+//u64 get_timestamp();
 
 
 #endif /* CORE_UTILITIES_H_ */

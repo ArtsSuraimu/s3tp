@@ -7,6 +7,7 @@
 
 #include "constants.h"
 #include "Buffer.h"
+#include "utilities.h"
 #include <map>
 
 #define TX_PARAM_RECOVERY 0x01
