@@ -24,6 +24,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 #    LICENSE
 #    README.md)
 set(SOURCE_FILES
+        connector/s3tp_shared.h
         core/constants.h
         core/debug.cpp
         core/debug.h
@@ -36,6 +37,18 @@ set(SOURCE_FILES
         core/Buffer.h
         core/s3tp_main.cpp
         core/s3tp_main.h
-        core/SimpleQueue.h)
+        core/SimpleQueue.h
+        core/s3tp_daemon.cpp
+        core/s3tp_daemon.h
+        core/client.cpp
+        core/client.h connector/s3tp_shared.cpp)
+
+set(CONNECTOR_SRC_FILES
+        connector/s3tp_connector.cpp
+        connector/s3tp_connector.h
+        connector/s3tp_shared.h
+        connector/s3tp_shared.cpp
+        connector/connector_main.cpp)
 
 add_executable(s3tp ${SOURCE_FILES})
+add_executable(s3tp_conn ${CONNECTOR_SRC_FILES})
