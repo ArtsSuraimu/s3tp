@@ -10,6 +10,7 @@
 #include <time.h>
 #include "debug.h"
 #include <unistd.h>
+#include <string>
 #include "s3tp_daemon.h"
 
 int hexdump(const unsigned char *buffer, ssize_t len)
@@ -194,15 +195,37 @@ void s3tpMainModuleTest() {
 }
 
 void simpleQueueTest() {
-	SimpleQueue<RawData> testQueue(3, SIMPLE_QUEUE_NON_BLOCKING);
+	SimpleQueue<int> testQueue(3, SIMPLE_QUEUE_NON_BLOCKING);
 	for (u8 i=10; i<15; i++) {
-		if (testQueue.push(RawData(NULL, 0, i, i)) == SIMPLE_QUEUE_FULL) {
+		if (testQueue.push(i) == SIMPLE_QUEUE_FULL) {
 			printf("Data for port %d not inserted. Queue full\n", i);
 		}
 	}
 
 	while (!testQueue.isEmpty()) {
-		printf("Popped data for port %d\n", testQueue.pop().port);
+		printf("Popped data: %d\n", testQueue.pop());
+	}
+}
+
+void crcTest() {
+	std::string myTest = "helloworldblablub";
+	size_t len = myTest.length();
+	uint16_t crc = calc_checksum(myTest.data(), (uint16_t) len);
+	uint8_t firstByte = (uint8_t)crc;
+	uint8_t secondByte = (uint8_t)(crc >> 8);
+	printf("CRC: %d Split: %d %d\n", crc, firstByte, secondByte);
+	//Correct checksum
+	if (verify_checksum(myTest.data(), (uint16_t)len, crc)) {
+		printf("First verification succeeded!\n");
+	} else {
+		printf("First verification failed!\n");
+	}
+	myTest = "hellowarldblablub";
+	len = myTest.length();
+	if (verify_checksum(myTest.data(), (uint16_t)len, crc)) {
+		printf("Second verification succeeded!\n");
+	} else {
+		printf("Second verification failed!\n");
 	}
 }
 
@@ -221,5 +244,6 @@ int main(int argc, char**argv) {
 	//txModuleTest();
 	//simpleQueueTest();
 	//s3tpMainModuleTest();
-	daemonTest();
+	//daemonTest();
+	crcTest();
 }
