@@ -19,7 +19,10 @@ public:
     s3tp_connector();
     int init(S3TP_CONFIG config, S3TP_CALLBACK callback);
     int send(const void * data, size_t len);
+    char * recvRaw(size_t * len, int * error);
+    int recv(void * buffer, size_t len);
     void closeConnection();
+    bool isConnected();
 private:
     int socketDescriptor;
     bool connected;

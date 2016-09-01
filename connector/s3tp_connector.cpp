@@ -2,19 +2,24 @@
 // Created by Lorenzo Donini on 30/08/16.
 //
 
-#include <string>
-#include <iostream>
 #include "s3tp_connector.h"
-
-const char * socket_path = "/tmp/testing";
 
 s3tp_connector::s3tp_connector() {
     connected = false;
     pthread_mutex_init(&connector_mutex, NULL);
 }
 
+bool s3tp_connector::isConnected() {
+    pthread_mutex_lock(&connector_mutex);
+    bool result = connected;
+    pthread_mutex_unlock(&connector_mutex);
+    return result;
+}
+
 int s3tp_connector::init(S3TP_CONFIG config, S3TP_CALLBACK callback) {
     struct sockaddr_un addr;
+    ssize_t wr, rd;
+    int commCode;
 
     this->config = config;
     this->callback = callback;
@@ -30,15 +35,40 @@ int s3tp_connector::init(S3TP_CONFIG config, S3TP_CALLBACK callback) {
     if (connect(socketDescriptor, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
         return CODE_ERROR_SOCKET_CONNECT;
     }
+    pthread_mutex_lock(&connector_mutex);
     connected = true;
-    printf("Connected to server successfully!\n");
+    pthread_mutex_unlock(&connector_mutex);
+    printf("client: Connected to server successfully!\n");
 
     //Sending configuration over to server
-    if (write(socketDescriptor, &config, sizeof(S3TP_CONFIG)) <= 0) {
+    wr = write(socketDescriptor, &config, sizeof(S3TP_CONFIG));
+    if (wr == 0) {
+        printf("Socket was closed by server\n");
+        connected = false;
+        return CODE_ERROR_SOCKET_NO_CONN;
+    } else if (wr < 0) {
         printf("Error while sending configuration to server\n");
+        closeConnection();
         return CODE_ERROR_SOCKET_CONFIG;
     }
-    printf("Configuration sent to server\n");
+
+    printf("client: Configuration sent to server\n");
+    rd = read(socketDescriptor, &commCode, sizeof(int));
+    if (rd == 0) {
+        printf("Socket was closed by server\n");
+        connected = false;
+        return CODE_ERROR_SOCKET_NO_CONN;
+    } else if (rd < 0) {
+        printf("Error while receiving ack from server\n");
+        closeConnection();
+        return CODE_ERROR_SOCKET_CONFIG;
+    }
+
+    if (commCode == CODE_SERVER_PORT_BUSY) {
+        printf("Cannot connect to server on port %d, because it is currently busy\n", config.port);
+        closeConnection();
+        return CODE_SERVER_PORT_BUSY;
+    }
 
     //Starting asynchronous routine only if callback was set
     if (callback != NULL) {
@@ -50,19 +80,133 @@ int s3tp_connector::init(S3TP_CONFIG config, S3TP_CALLBACK callback) {
 
 int s3tp_connector::send(const void * data, size_t len) {
     ssize_t wr;
+    int error = 0;
 
-    pthread_mutex_lock(&connector_mutex);
-    if (!connected) {
-        printf("Trying to write on closed channel");
+    if (!isConnected()) {
+        printf("client: Trying to write on closed channel\n");
         pthread_mutex_unlock(&connector_mutex);
         return CODE_ERROR_SOCKET_NO_CONN;
     }
-    pthread_mutex_unlock(&connector_mutex);
+
+    error = write_length_safe(socketDescriptor, len);
+    if (error == CODE_ERROR_SOCKET_WRITE) {
+        printf("client: error while writing on socket\n");
+        return error;
+    }
 
     wr = write(socketDescriptor, data, len);
-    printf("Written %ld bytes\n", wr);
+    if (wr <= 0) {
+        printf("client: error while writing on socket\n");
+        return CODE_ERROR_SOCKET_WRITE;
+    }
+    printf("client: Written %ld bytes\n", wr);
 
     return (int)wr;
+}
+
+int s3tp_connector::recv(void * buffer, size_t len) {
+    int error = 0;
+    size_t msg_len;
+    ssize_t rd, i;
+
+    if (!isConnected()) {
+        printf("client: Trying to read from a closed channel\n");
+        return CODE_ERROR_SOCKET_NO_CONN;
+    }
+
+    error = read_length_safe(socketDescriptor, &msg_len);
+    if (error == CODE_ERROR_SOCKET_NO_CONN) {
+        pthread_mutex_lock(&connector_mutex);
+        connected = false;
+        pthread_mutex_unlock(&connector_mutex);
+        printf("client: connection was closed by server\n");
+        return error;
+    } else if (error < 0) {
+        closeConnection();
+        return error;
+    }
+
+    if (msg_len > len) {
+        printf("client: provided buffer cannot hold message\n");
+        closeConnection();
+        return CODE_ERROR_INVALID_LENGTH;
+    }
+    len = MIN(len, msg_len);
+
+    char * currentPosition = (char *)buffer;
+    rd = 0;
+    do {
+        i = read(socketDescriptor, currentPosition, (len - rd));
+        if (i == 0) {
+            pthread_mutex_lock(&connector_mutex);
+            connected = false;
+            pthread_mutex_unlock(&connector_mutex);
+            printf("client: connection was closed by server\n");
+            return CODE_ERROR_SOCKET_NO_CONN;
+        } else if (i < 0) {
+            printf("client: error while reading from socket\n");
+            closeConnection();
+            return CODE_ERROR_SOCKET_READ;
+        }
+        rd += i;
+        currentPosition += i;
+    } while (rd < len);
+
+    return (int)rd;
+}
+
+char * s3tp_connector::recvRaw(size_t * len, int * error) {
+    size_t msg_len = 0;
+    ssize_t rd, i;
+
+    if (!isConnected()) {
+        printf("client: Trying to read from a closed channel\n");
+        *len = 0;
+        *error = CODE_ERROR_SOCKET_NO_CONN;
+        return NULL;
+    }
+
+    *error = read_length_safe(socketDescriptor, &msg_len);
+    if (*error == CODE_ERROR_SOCKET_NO_CONN) {
+        pthread_mutex_lock(&connector_mutex);
+        connected = false;
+        pthread_mutex_unlock(&connector_mutex);
+        *len = 0;
+        printf("client: connection was closed by server\n");
+        return NULL;
+    } else if (*error < 0) {
+        *len = 0;
+        closeConnection();
+        return NULL;
+    }
+
+    char * msg = new char[*len];
+    char * currentPosition = msg;
+    //Read payload
+    rd = 0;
+    do {
+        i = read(socketDescriptor, currentPosition, (*len - rd));
+        if (i == 0) {
+            *error = CODE_ERROR_SOCKET_NO_CONN;
+            pthread_mutex_lock(&connector_mutex);
+            connected = false;
+            pthread_mutex_unlock(&connector_mutex);
+            *len = 0;
+            printf("client: connection was closed by server\n");
+            delete [] msg;
+            return NULL;
+        } else if (i < 0) {
+            *error = CODE_ERROR_SOCKET_READ;
+            delete [] msg;
+            printf("client: error while reading from socket\n");
+            closeConnection();
+            return NULL;
+        }
+        rd += i;
+        currentPosition += i;
+    } while(rd < *len);
+
+    return msg;
 }
 
 void s3tp_connector::closeConnection() {
@@ -70,6 +214,7 @@ void s3tp_connector::closeConnection() {
     if (connected) {
         close(socketDescriptor);
         connected = false;
+        printf("client: closed connection %d\n", socketDescriptor);
     }
     pthread_mutex_unlock(&connector_mutex);
     //Not waiting for the listener thread to die for now
@@ -79,49 +224,62 @@ void s3tp_connector::closeConnection() {
  * Asynchronous thread routine
  */
 void s3tp_connector::asyncListener() {
-    ssize_t i, rd, err;
-    int len;
+    int err = 0;
+    ssize_t i, rd;
+    size_t len;
 
-    printf("Started client thread\n");
+    printf("client: Started client thread\n");
     pthread_mutex_lock(&connector_mutex);
     while (connected) {
         pthread_mutex_unlock(&connector_mutex);
-        i = read(socketDescriptor, &len, sizeof(int));
-        if (i <= 0) {
-            printf("Error reading from socket\n");
+        err = read_length_safe(socketDescriptor, &len);
+        if (err == CODE_ERROR_LENGTH_CORRUPT) {
+            printf("client: Corrupt data received, dropping connection\n");
+            closeConnection();
+            break;
+        } else if (err < 0) {
+            printf("client: error during read phase. Shutting down connection\n");
+            closeConnection();
+            break;
+        } else if (err == CODE_ERROR_SOCKET_NO_CONN) {
+            //Socket was already closed
             pthread_mutex_lock(&connector_mutex);
             connected = false;
             break;
         }
-        err = 0;
         //Length of next message received
         char * message = new char[len];
+        char * currentPosition = message;
 
         //Read payload
         rd = 0;
         do {
-            i = read(socketDescriptor, message, ((size_t)len - rd));
-            if (i <= 0) {
-                printf("Error reading payload\n");
-                err = i;
-                break;
+            i = read(socketDescriptor, currentPosition, (len - rd));
+            //Checking errors
+            if (i == 0) {
+                pthread_mutex_lock(&connector_mutex);
+                connected = false;
+                pthread_mutex_unlock(&connector_mutex);
+                printf("client: connection was closed by server\n");
+                delete [] message;
+                return;
+            } else if (i < 0) {
+                printf("client: error while reading from socket\n");
+                closeConnection();
+                delete [] message;
+                return;
             }
             rd += i;
+            currentPosition += i;
         } while(rd < len);
 
-        if (err != 0) {
-            pthread_mutex_lock(&connector_mutex);
-            continue;
-        }
-
         //Payload received entirely
-        printf("Client %d on port %d: received data <%s>\n", socketDescriptor, config.port, message);
+        printf("client %d on port %d: received data <%s>\n", socketDescriptor, config.port, message);
         callback(message, len);
 
         pthread_mutex_lock(&connector_mutex);
     }
     pthread_mutex_unlock(&connector_mutex);
-    printf("Closed socket %d\n", socketDescriptor);
 
     pthread_exit(NULL);
 }
@@ -130,32 +288,3 @@ void * s3tp_connector::staticAsyncListener(void * args) {
     static_cast<s3tp_connector *>(args)->asyncListener();
     return NULL;
 }
-
-/*
- * Main Program
- */
-/*void dummyCallback(char * msg, int len) {
-    if (len <= 0) {
-        printf("Received empty message\n");
-    } else {
-        printf("Received message %s\n", msg);
-    }
-}
-
-int main() {
-    s3tp_connector connector;
-    S3TP_CONFIG config;
-    config.port = 15;
-    config.channel = 3;
-    config.options = S3TP_PARAM_ARQ;
-    connector.init(config, dummyCallback);
-    std::string testS;
-    std::cout << "Please insert a message to send: ";
-    std::cin >> testS;
-    connector.send((void *)testS.data(), testS.length());
-
-    sleep(10);
-    connector.closeConnection();
-
-    return 0;
-}*/
