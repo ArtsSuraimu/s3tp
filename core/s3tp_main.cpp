@@ -42,7 +42,7 @@ int s3tp_main::stop() {
     return CODE_SUCCESS;
 }
 
-int s3tp_main::send(u8 channel, u8 port, void * data, size_t len) {
+int s3tp_main::send(uint8_t channel, uint8_t port, void * data, size_t len) {
     /* As messages should still be sent out sequentially,
      * we're putting all of them into the fragmentation queue.
      * Fragmentation thread will then be in charge of checking
@@ -65,7 +65,7 @@ int s3tp_main::send(u8 channel, u8 port, void * data, size_t len) {
     return CODE_INTERNAL_ERROR;
 }
 
-int s3tp_main::sendSimplePayload(u8 channel, u8 port, void * data, size_t len) {
+int s3tp_main::sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t len) {
     S3TP_PACKET * packet;
     int status = 0;
 
@@ -73,7 +73,7 @@ int s3tp_main::sendSimplePayload(u8 channel, u8 port, void * data, size_t len) {
     packet = new S3TP_PACKET();
     memcpy(packet->pdu, data, len);
     packet->hdr.port = port;
-    packet->hdr.pdu_length = (u16)len;
+    packet->hdr.pdu_length = (uint16_t)len;
     pthread_mutex_lock(&s3tp_mutex);
     status = tx.enqueuePacket(packet, 0, false, channel);
     pthread_mutex_unlock(&s3tp_mutex);
@@ -81,7 +81,7 @@ int s3tp_main::sendSimplePayload(u8 channel, u8 port, void * data, size_t len) {
     return status;
 }
 
-int s3tp_main::fragmentPayload(u8 channel, u8 port, void * data, size_t len) {
+int s3tp_main::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len) {
     S3TP_PACKET * packet;
 
     //Need to fragment
@@ -89,18 +89,18 @@ int s3tp_main::fragmentPayload(u8 channel, u8 port, void * data, size_t len) {
     int status = 0;
     int fragment = 0;
     bool moreFragments = true;
-    u8 * dataPtr = (u8 *) data;
+    uint8_t * dataPtr = (uint8_t *) data;
     while (written < len) {
         packet = new S3TP_PACKET();
         packet->hdr.port = port;
         if (written + LEN_S3TP_PDU > len) {
             //We are at the last packet, so don't need to write max payload
             memcpy(packet->pdu, dataPtr, len - written);
-            packet->hdr.pdu_length = (u16) (len - written);
+            packet->hdr.pdu_length = (uint16_t) (len - written);
         } else {
             //Filling packet payload with max permitted payload
             memcpy(packet->pdu, dataPtr, LEN_S3TP_PDU);
-            packet->hdr.pdu_length = (u16) LEN_S3TP_PDU;
+            packet->hdr.pdu_length = (uint16_t) LEN_S3TP_PDU;
         }
         written += packet->hdr.pdu_length;
         if (written >= len) {

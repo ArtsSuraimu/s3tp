@@ -109,7 +109,7 @@ bool verify_checksum(const char *data, uint16_t len, uint16_t checksum) {
  */
 
 /*Get next available sequence number */
-u8 get_nxt_seq(int * seed)
+uint8_t get_nxt_seq(int * seed)
 {
 	(*seed) ++;
 	return *seed;

@@ -36,9 +36,9 @@ private:
     pthread_t tx_thread;
     pthread_mutex_t tx_mutex;
     pthread_cond_t tx_cond;
-    u8 global_seq_num;
+    uint8_t global_seq_num;
 
-    std::map<u8, u8> port_sequence;
+    std::map<uint8_t, uint8_t> port_sequence;
     Buffer outBuffer;
     void * spi_interface;
 

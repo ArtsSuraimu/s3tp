@@ -15,11 +15,12 @@
 class client {
 private:
     pthread_t client_thread;
+    pthread_mutex_t client_mutex;
     SOCKET socket;
     bool connected;
-    u8 app_port;
-    u8 virtual_channel;
-    u8 options;
+    uint8_t app_port;
+    uint8_t virtual_channel;
+    uint8_t options;
     s3tp_main * main;
 
     void clientRoutine();

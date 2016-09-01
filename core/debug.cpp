@@ -36,7 +36,7 @@ void queueTest() {
 	PriorityQueue * root = (PriorityQueue *) init_queue();
 	S3TP_PACKET * pack;
 	S3TP_PACKET_WRAPPER * wrapper;
-	for (u16 i=1050; i>750; i--) {
+	for (uint16_t i=1050; i>750; i--) {
 		pack = (S3TP_PACKET *) calloc(1, sizeof(S3TP_PACKET));
 		pack->hdr.port = 50;
 		pack->hdr.seq = i;
@@ -72,7 +72,7 @@ void queueTest() {
 	wrapper->pkt = pack;
 	push(root, wrapper);
 
-	for (u16 i=1; i<=500; i++) {
+	for (uint16_t i=1; i<=500; i++) {
 		pack = (S3TP_PACKET *) calloc(1, sizeof(S3TP_PACKET));
 		pack->hdr.port = 50;
 		pack->hdr.seq = i;
@@ -81,7 +81,7 @@ void queueTest() {
 		wrapper->pkt = pack;
 		push(root, wrapper);
 	}
-	for (u16 i=750; i>500; i--) {
+	for (uint16_t i=750; i>500; i--) {
 		pack = (S3TP_PACKET *) calloc(1, sizeof(S3TP_PACKET));
 		pack->hdr.port = 50;
 		pack->hdr.seq = i;
@@ -109,23 +109,23 @@ void queueTest() {
  */
 void * publisherRoutine(void * arg) {
 	TxModule * tx = (TxModule*)arg;
-	u8 appPort = (u8) (rand() % DEFAULT_MAX_OUT_PORTS);
-	u16 sleepSeconds = 1;
+	uint8_t appPort = (uint8_t) (rand() % DEFAULT_MAX_OUT_PORTS);
+	uint16_t sleepSeconds = 1;
 
-	for (u16 i=0; i < 100; i++) {
+	for (uint16_t i=0; i < 100; i++) {
 		S3TP_PACKET * packet = new S3TP_PACKET();
 		packet->hdr.port = appPort;
 		printf("Enqueuing packet %d...\n", i);
 		tx->enqueuePacket(packet, 0, false, 0);
 	}
-	for (u16 i=100; i<110; i++) {
+	for (uint16_t i=100; i<110; i++) {
 		S3TP_PACKET * packet = new S3TP_PACKET();
 		packet->hdr.port = appPort;
 		printf("Enqueuing packet %d...\n", i);
 		tx->enqueuePacket(packet, 0, false, 0);
 		sleep(sleepSeconds);
 	}
-	for (u16 i=110; i<120; i++) {
+	for (uint16_t i=110; i<120; i++) {
 		S3TP_PACKET * packet = new S3TP_PACKET();
 		packet->hdr.port = appPort;
 		printf("Enqueuing packet %d...\n", i);
@@ -144,7 +144,7 @@ void txModuleTest() {
 	pthread_t publisherThread2;
 	pthread_create(&publisherThread1, NULL, publisherRoutine, &tx);
 	pthread_create(&publisherThread2, NULL, publisherRoutine, &tx);
-	u16 sleepSeconds = 15;
+	uint16_t sleepSeconds = 15;
 	sleep(sleepSeconds);
 	tx.stopRoutine();
 	sleep(5);
@@ -152,7 +152,7 @@ void txModuleTest() {
 
 void * applicationRoutine(void * args) {
 	s3tp_main * main = (s3tp_main *)args;
-	u8 appPort = (u8) (rand() % DEFAULT_MAX_OUT_PORTS);
+	uint8_t appPort = (uint8_t) (rand() % DEFAULT_MAX_OUT_PORTS);
 	int len, i, result;
 	char * message;
 	for (i=0; i<5; i++) {
@@ -196,7 +196,7 @@ void s3tpMainModuleTest() {
 
 void simpleQueueTest() {
 	SimpleQueue<int> testQueue(3, SIMPLE_QUEUE_NON_BLOCKING);
-	for (u8 i=10; i<15; i++) {
+	for (uint8_t i=10; i<15; i++) {
 		if (testQueue.push(i) == SIMPLE_QUEUE_FULL) {
 			printf("Data for port %d not inserted. Queue full\n", i);
 		}
@@ -244,6 +244,6 @@ int main(int argc, char**argv) {
 	//txModuleTest();
 	//simpleQueueTest();
 	//s3tpMainModuleTest();
-	//daemonTest();
 	crcTest();
+	daemonTest();
 }

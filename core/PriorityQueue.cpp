@@ -144,7 +144,7 @@ void deinit_queue(PriorityQueue* root) {
 	free(root);
 }
 
-u32 computeBufferSize(PriorityQueue* root) {
+uint32_t computeBufferSize(PriorityQueue* root) {
 	return root->size * sizeof(S3TP_PACKET);
 }
 

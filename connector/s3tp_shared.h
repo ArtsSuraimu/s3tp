@@ -36,24 +36,14 @@
 /*
  * Typedefs
  */
-typedef unsigned char u8;
-typedef char i8;
-typedef unsigned short u16;
-typedef short i16;
-typedef int i32;
-typedef unsigned int u32;
-typedef long i64;
-typedef unsigned long u64;
-typedef long long i128;
-typedef unsigned long long u128;
 typedef int SOCKET;
 
 typedef void (*S3TP_CALLBACK) (char*, size_t);
 
 typedef struct tag_s3tp_config {
-    u8 port;
-    u8 channel;
-    u8 options;
+    uint8_t port;
+    uint8_t channel;
+    uint8_t options;
 
     void setArq(int active) {
         options ^= (active & 0x01);

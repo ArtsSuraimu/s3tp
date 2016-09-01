@@ -18,7 +18,7 @@ public:
     ~s3tp_main();
     int init();
     int stop();
-    int send(u8 channel, u8 port, void * data, size_t len);
+    int send(uint8_t channel, uint8_t port, void * data, size_t len);
 
 private:
     pthread_t assembly_thread;
@@ -29,8 +29,8 @@ private:
     pthread_cond_t assembly_cond;
     //TxModule
     TxModule tx;
-    int fragmentPayload(u8 channel, u8 port, void * data, size_t len);
-    int sendSimplePayload(u8 channel, u8 port, void * data, size_t len);
+    int fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len);
+    int sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t len);
     //RxModule
     void assemblyRoutine();
     static void * staticAssemblyRoutine(void * args);

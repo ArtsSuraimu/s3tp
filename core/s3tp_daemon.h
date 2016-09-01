@@ -22,8 +22,8 @@ class s3tp_daemon {
 private:
     sockaddr_un address;
     SOCKET server;
-    std::map<int, client*> clients;
-    std::map<int, pthread_cond_t> client_signals;
+    std::map<uint8_t, client*> clients;
+    std::map<uint8_t, pthread_cond_t> client_signals;
 public:
     int init();
     void startDaemon();

@@ -25,7 +25,7 @@ struct tag_s3tp_queue_root {
 	PriorityQueue_node * head;
 	PriorityQueue_node * tail;
 	pthread_mutex_t q_mutex;
-	u16 size;
+	uint16_t size;
 };
 
 struct tag_s3tp_queue_node {
@@ -39,7 +39,7 @@ int push (PriorityQueue *root, S3TP_PACKET_WRAPPER* packet);
 S3TP_PACKET_WRAPPER* pop (PriorityQueue* root);
 S3TP_PACKET_WRAPPER* peek (PriorityQueue* root);
 void deinit_queue (PriorityQueue* root);
-u32 computeBufferSize (PriorityQueue* root);
+uint32_t computeBufferSize (PriorityQueue* root);
 bool isEmpty(PriorityQueue * root);
 
 #endif /* CORE_QUEUE_H_ */

@@ -103,9 +103,9 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet, int frag_no, bool more_fragmen
         pthread_mutex_unlock(&tx_mutex);
         return CODE_INACTIVE_ERROR;
     }
-    u8 global_seq = global_seq_num;
-    u8 sub_seq = (u8) frag_no;
-    packet->hdr.seq = (u16)((global_seq << 8) | (sub_seq & 0xFF));
+    uint8_t global_seq = global_seq_num;
+    uint8_t sub_seq = (uint8_t) frag_no;
+    packet->hdr.seq = (uint8_t)((global_seq << 8) | (sub_seq & 0xFF));
     if (more_fragments) {
         packet->hdr.setMoreFragments();
     } else {
@@ -116,13 +116,13 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet, int frag_no, bool more_fragmen
     //Increasing port sequence
     packet->hdr.seq_port = port_sequence[packet->hdr.port]++;
     pthread_mutex_unlock(&tx_mutex);
-    
+
     //i8 crc = calc_checksum(packet->pdu, packet->hdr.pdu_length);
 
     //TODO: compute CRC
     S3TP_PACKET_WRAPPER * wrapper = new S3TP_PACKET_WRAPPER();
     wrapper->pkt = packet;
-    wrapper->channel = (u8) spi_channel;
+    wrapper->channel = (uint8_t) spi_channel;
     outBuffer.write(wrapper);
     pthread_cond_signal(&tx_cond);
 

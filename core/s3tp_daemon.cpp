@@ -4,7 +4,6 @@
 
 #include "s3tp_daemon.h"
 
-//const char * socket_path = "/tmp/testing";
 
 int s3tp_daemon::init() {
     if ((server = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
