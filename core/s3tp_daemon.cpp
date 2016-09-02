@@ -19,7 +19,22 @@ int s3tp_daemon::init() {
         return CODE_ERROR_SOCKET_BIND;
     }
 
+    pthread_mutex_init(&clients_mutex, NULL);
+    s3tp.init();
+
     return CODE_SUCCESS;
+}
+
+void s3tp_daemon::onDisconnected(void * params) {
+    uint8_t * app_port = (uint8_t *)params;
+    //Client disconnected from port. Mark that port as available again.
+    pthread_mutex_lock(&clients_mutex);
+    clients.erase(*app_port);
+    pthread_mutex_unlock(&clients_mutex);
+}
+
+void s3tp_daemon::onConnected(void * params) {
+    //Do nothing
 }
 
 #pragma clang diagnostic push
@@ -41,6 +56,8 @@ void s3tp_daemon::startDaemon() {
     listen(server, 5);
     addrlen = sizeof (struct sockaddr_in);
 
+    //Ignore sigpipe signal in case a thread receives a forced disconnection
+    signal(SIGPIPE, SIG_IGN);
     printf("Listening...\n");
 
     //Start s3tp_daemon service
@@ -68,15 +85,26 @@ void s3tp_daemon::startDaemon() {
         if (clients[config.port] != NULL) {
             //A client is already registered to this port
             commCode = CODE_SERVER_PORT_BUSY;
-            write(new_socket, &commCode, sizeof(commCode));
-            close(new_socket);
+            if (write(new_socket, &commCode, sizeof(commCode)) != 0) {
+                close(new_socket);
+            }
             printf("Refused client %d as port %d is currently busy\n", new_socket, config.port);
         } else {
             commCode = CODE_SERVER_ACCEPT;
-            write(new_socket, &commCode, sizeof(commCode));
+            wr = write(new_socket, &commCode, sizeof(commCode));
+            if (wr == 0) {
+                printf("Client %d disconnected\n", new_socket);
+                continue;
+            } else if (wr < 0) {
+                printf("Connection error with client %d\n", new_socket);
+                close(new_socket);
+                continue;
+            }
             //Create new client with app_port. client automatically starts working in background (on a different thread)
-            client * cli = new client(new_socket, config, NULL);
+            client * cli = new client(new_socket, config, &s3tp, this);
+            pthread_mutex_lock(&clients_mutex);
             clients[config.port] = cli;
+            pthread_mutex_unlock(&clients_mutex);
         }
     }
 }
