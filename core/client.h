@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include "../connector/s3tp_shared.h"
 #include "s3tp_main.h"
+#include "connection_listener.h"
 
 class client {
 private:
@@ -21,12 +22,18 @@ private:
     uint8_t app_port;
     uint8_t virtual_channel;
     uint8_t options;
-    s3tp_main * main;
+    connection_listener * listener;
+    s3tp_main * s3tp;
+
+    bool isConnected();
+    void closeConnection();
+    void handleConnectionClosed();
 
     void clientRoutine();
     static void * staticClientRoutine(void * args);
 public:
-    client(SOCKET socket, S3TP_CONFIG config, s3tp_main * main);
+    client(SOCKET socket, S3TP_CONFIG config, s3tp_main * s3tp, connection_listener * listener);
+    int send(const void * data, size_t len);
     void kill();
 };
 
