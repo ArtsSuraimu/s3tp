@@ -13,20 +13,8 @@
 
 #define IN
 #define OUT
-#define NULL 0
 
 typedef int SOCKET;
-
-/*typedef unsigned char u8;
-typedef char i8;
-typedef unsigned short u16;
-typedef short i16;
-typedef int i32;
-typedef unsigned int u32;
-typedef long i64;
-typedef unsigned long u64;
-typedef long long i128;
-typedef unsigned long long u128;*/
 
 #pragma pack(push, 1)
 typedef struct tag_s3tp_header

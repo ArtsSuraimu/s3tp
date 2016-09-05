@@ -41,6 +41,7 @@ void TxModule::txRoutine() {
                (pkt->hdr.seq >> 8),
                (pkt->hdr.seq & 0xFF),
                pkt->hdr.seq_port);
+
         //TODO: send packet to SPI interface
         delete wrapper;
         pthread_mutex_lock(&tx_mutex);
@@ -56,15 +57,13 @@ void * TxModule::staticTxRoutine(void * args) {
 }
 
 //Public methods
-void TxModule::startRoutine(void* spi_if) {
+void TxModule::startRoutine(Transceiver::LinkInterface * spi_if) {
     pthread_mutex_lock(&tx_mutex);
     spi_interface = spi_if;
     active = true;
-    pthread_create(&tx_thread, NULL, &TxModule::staticTxRoutine, this);
+    int txId = pthread_create(&tx_thread, NULL, &TxModule::staticTxRoutine, this);
     pthread_mutex_unlock(&tx_mutex);
-    __uint64_t txId;
-    pthread_threadid_np(tx_thread, &txId);
-    printf("Tx Thread (id %lld): START\n", txId);
+    printf("Tx Thread (id %d): START\n", txId);
 }
 
 void TxModule::stopRoutine() {
@@ -72,12 +71,6 @@ void TxModule::stopRoutine() {
     active = false;
     pthread_cond_signal(&tx_cond);
     pthread_mutex_unlock(&tx_mutex);
-    __uint64_t txId;
-    pthread_threadid_np(tx_thread, &txId);
-    if (txId > 0) {
-        pthread_join(tx_thread, NULL);
-        printf("Tx Thread (id %lld): STOP\n", txId);
-    }
 }
 
 TxModule::STATE TxModule::getCurrentState() {

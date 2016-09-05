@@ -17,13 +17,17 @@ int s3tp_main::init() {
     pthread_mutex_init(&s3tp_mutex, NULL);
     pthread_mutex_lock(&s3tp_mutex);
     active = true;
-    //TODO: create/load spi interface
-    tx.startRoutine(NULL);
 
-    pthread_create(&assembly_thread, NULL, &staticAssemblyRoutine, this);
-    uint64_t id;
-    pthread_threadid_np(assembly_thread, &id);
-    printf("Fragmentation Thread (id %lld): START\n", id);
+    //Creating spi interface
+    Transceiver::SPIDescriptor desc;
+    desc.spi = "/dev/spidev1.1#P8_46";
+    desc.interrupt = PinMapper::find("P8_45");
+    transceiver = Transceiver::BackendFactory::fromSPI(desc, rx);
+    transceiver->start();
+    tx.startRoutine(rx.link);
+
+    int id = pthread_create(&assembly_thread, NULL, &staticAssemblyRoutine, this);
+    printf("Assembly Thread (id %d): START\n", id);
     pthread_mutex_unlock(&s3tp_mutex);
 
     return CODE_SUCCESS;
@@ -34,10 +38,18 @@ int s3tp_main::stop() {
     pthread_mutex_lock(&s3tp_mutex);
     active = false;
     //pthread_join(fragmentation_thread, NULL);
-    //Quit the Tx thread
+
+    //TODO: Quit assembly thread
+    pthread_mutex_unlock(&s3tp_mutex);
+    pthread_join(assembly_thread, NULL);
+
+    //Stop modules connected to Link Layer
+    pthread_mutex_lock(&s3tp_mutex);
     tx.stopRoutine();
     rx.stopModule();
-    //TODO: Quit assembly thread
+    transceiver->stop();
+    delete transceiver;
+
     pthread_mutex_unlock(&s3tp_mutex);
 
     return CODE_SUCCESS;
@@ -126,6 +138,7 @@ int s3tp_main::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_
  */
 void s3tp_main::assemblyRoutine() {
     //TODO: implement routine
+    //while ()
 }
 
 void * s3tp_main::staticAssemblyRoutine(void * args) {

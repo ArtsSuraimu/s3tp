@@ -9,6 +9,7 @@
 #include "Buffer.h"
 #include "utilities.h"
 #include <map>
+#include <trctrl/LinkInterface.h>
 
 #define TX_PARAM_RECOVERY 0x01
 #define TX_PARAM_CUSTOM 0x02
@@ -26,7 +27,7 @@ public:
     ~TxModule();
 
     STATE getCurrentState();
-    void startRoutine(void * spi_if);
+    void startRoutine(Transceiver::LinkInterface * spi_if);
     void stopRoutine();
     int enqueuePacket(S3TP_PACKET * packet, int frag_no, bool more_fragments, int spi_channel);
 
@@ -37,6 +38,7 @@ private:
     pthread_mutex_t tx_mutex;
     pthread_cond_t tx_cond;
     uint8_t global_seq_num;
+    Transceiver::LinkInterface * linkInterface;
 
     std::map<uint8_t, uint8_t> port_sequence;
     Buffer outBuffer;

@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.4)
 project(s3tp)
 
+# packages
+find_package(moveio REQUIRED)
+include_directories(${MOVEIO_INCLUDE_DIRS})
+
+find_package(trctrl REQUIRED)
+include_directories(${TRCTRL_INCLUDE_DIRS})
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 set(SOURCE_FILES
@@ -29,6 +36,12 @@ set(SOURCE_FILES
         core/client.h
         core/connection_listener.h)
 
+add_executable(s3tp ${SOURCE_FILES})
+
+target_link_libraries(s3tp ${MOVEIO_LIBRARY})
+target_link_libraries(s3tp ${TRCTRL_LIBRARY})
+target_link_libraries(s3tp pthread)
+
 set(CONNECTOR_SRC_FILES
         connector/s3tp_connector.cpp
         connector/s3tp_connector.h
@@ -36,6 +49,6 @@ set(CONNECTOR_SRC_FILES
         connector/s3tp_shared.cpp
         connector/connector_main.cpp)
 
-
-add_executable(s3tp ${SOURCE_FILES})
 add_executable(s3tp_conn ${CONNECTOR_SRC_FILES})
+
+target_link_libraries(s3tp_conn pthread)

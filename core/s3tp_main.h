@@ -8,6 +8,9 @@
 #include "TxModule.h"
 #include "RxModule.h"
 #include "SimpleQueue.h"
+#include <cstring>
+#include <moveio/PinMapper.h>
+#include <trctrl/BackendFactory.h>
 
 #define CODE_SUCCESS 0
 #define CODE_ERROR_MAX_MESSAGE_SIZE -2
@@ -27,6 +30,7 @@ private:
     pthread_mutex_t s3tp_mutex;
 
     bool active;
+    Transceiver::Backend * transceiver;
 
     //TxModule
     TxModule tx;
