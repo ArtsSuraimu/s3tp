@@ -118,8 +118,10 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet, int frag_no, bool more_fragmen
     pthread_mutex_unlock(&tx_mutex);
 
     //i8 crc = calc_checksum(packet->pdu, packet->hdr.pdu_length);
+    char * dataPtr = (char *)packet->pdu;
+    uint16_t crc = calc_checksum(dataPtr, packet->hdr.pdu_length);
+    packet->hdr.crc = crc;
 
-    //TODO: compute CRC
     S3TP_PACKET_WRAPPER * wrapper = new S3TP_PACKET_WRAPPER();
     wrapper->pkt = packet;
     wrapper->channel = (uint8_t) spi_channel;
