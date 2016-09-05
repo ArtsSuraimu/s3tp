@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <cstdint>
 
 #define S3TP_OPTION_ARQ 0x01;
 #define S3TP_OPTION_CUSTOM 0x02;

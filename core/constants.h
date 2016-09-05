@@ -10,6 +10,8 @@
 
 #define VER "0.1"
 
+#include <cstdint>
+
 #define ETH_S3TP 0xBEEF
 #define MTU 1021
 

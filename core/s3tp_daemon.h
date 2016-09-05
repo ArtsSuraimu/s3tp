@@ -16,6 +16,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <map>
+#include <csignal>
 #include "client.h"
 #include "connection_listener.h"
 
