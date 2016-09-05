@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <cstdint>
+#include <cstdio>
 
 #define S3TP_OPTION_ARQ 0x01;
 #define S3TP_OPTION_CUSTOM 0x02;
@@ -33,6 +34,13 @@
 #define CODE_SERVER_INTERNAL_ERROR -3
 
 #define SAFE_TRANSMISSION_COUNT 3
+
+#ifdef MOVE_TRANSCEIVER_BACKEND_SPI_DEBUG
+#define LOG_DBG_S3TP(...) printf(__VA_ARGS__)
+#else
+#define LOG_DBG_S3TP(...)
+#endif
+
 
 /*
  * Typedefs
