@@ -213,9 +213,9 @@ void s3tp_connector::closeConnection() {
     pthread_mutex_lock(&connector_mutex);
     if (connected) {
         close(socketDescriptor);
-        connected = false;
         printf("client: closed connection %d\n", socketDescriptor);
     }
+    connected = false;
     pthread_mutex_unlock(&connector_mutex);
     //Not waiting for the listener thread to die for now
 }
