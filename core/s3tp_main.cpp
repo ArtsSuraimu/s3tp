@@ -19,12 +19,11 @@ int s3tp_main::init() {
     active = true;
     //TODO: create/load spi interface
     tx.startRoutine(NULL);
-    /*pthread_cond_init(&frag_cond, NULL);
-    pthread_create(&fragmentation_thread, NULL, &s3tp_main::staticFragmentationRoutine, this);
-    __uint64_t id;
-    pthread_threadid_np(fragmentation_thread, &id);
-    printf("Fragmentation Thread (id %lld): START\n", id);*/
-    //TODO: implement assembly thread as well
+
+    pthread_create(&assembly_thread, NULL, &staticAssemblyRoutine, this);
+    uint64_t id;
+    pthread_threadid_np(assembly_thread, &id);
+    printf("Fragmentation Thread (id %lld): START\n", id);
     pthread_mutex_unlock(&s3tp_mutex);
 
     return CODE_SUCCESS;
@@ -37,6 +36,8 @@ int s3tp_main::stop() {
     //pthread_join(fragmentation_thread, NULL);
     //Quit the Tx thread
     tx.stopRoutine();
+    rx.stopModule();
+    //TODO: Quit assembly thread
     pthread_mutex_unlock(&s3tp_mutex);
 
     return CODE_SUCCESS;

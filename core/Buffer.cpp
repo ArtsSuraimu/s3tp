@@ -43,7 +43,8 @@ int Buffer::write(S3TP_PACKET_WRAPPER * packet) {
     packet_counter[port] = queue->size;
     printf("BUFFER port %d: packet %d written (%d bytes)\n", (port & 0x7F), packet->pkt->hdr.seq, packet->pkt->hdr.pdu_length);
     pthread_mutex_unlock(&buffer_mutex);
-    return 0;
+
+    return CODE_SUCCESS;
 }
 
 PriorityQueue * Buffer::getQueue(int port) {

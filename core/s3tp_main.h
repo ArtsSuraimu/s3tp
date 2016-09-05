@@ -6,6 +6,7 @@
 #define S3TP_S3TP_MAIN_H
 
 #include "TxModule.h"
+#include "RxModule.h"
 #include "SimpleQueue.h"
 
 #define CODE_SUCCESS 0
@@ -22,16 +23,17 @@ public:
 
 private:
     pthread_t assembly_thread;
+    pthread_cond_t assembly_cond;
     pthread_mutex_t s3tp_mutex;
 
     bool active;
 
-    pthread_cond_t assembly_cond;
     //TxModule
     TxModule tx;
     int fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len);
     int sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t len);
     //RxModule
+    RxModule rx;
     void assemblyRoutine();
     static void * staticAssemblyRoutine(void * args);
 };
