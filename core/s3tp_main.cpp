@@ -218,5 +218,5 @@ int s3tp_main::onApplicationMessage(void * data, size_t len, void * params) {
  * Status callbacks
  */
 void s3tp_main::onLinkStatusChanged(bool active) {
-
+    tx.notifyLinkAvailability(active);
 }
