@@ -147,7 +147,7 @@ bool RxModule::isCompleteMessageForPortAvailable(int port) {
     PriorityQueue_node * node = q->head;
     uint8_t fragment = 0;
     while (node != NULL) {
-        S3TP_PACKET * pkt = node->payload->pkt;
+        S3TP_PACKET * pkt = node->element->pkt;
         if (pkt->hdr.seq_port != current_port_sequence[port]) {
             //Packet in queue is not the one with highest priority
             return false;
