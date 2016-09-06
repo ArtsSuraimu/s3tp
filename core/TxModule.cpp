@@ -24,6 +24,11 @@ TxModule::~TxModule() {
 void TxModule::txRoutine() {
     pthread_mutex_lock(&tx_mutex);
     while(active) {
+        if (!linkInterface->getLinkStatus()) {
+            state = BLOCKED;
+            pthread_cond_wait(&tx_cond, &tx_mutex);
+            continue;
+        }
         if(!outBuffer.packetsAvailable()) {
             state = WAITING;
             pthread_cond_wait(&tx_cond, &tx_mutex);
@@ -42,7 +47,8 @@ void TxModule::txRoutine() {
                (pkt->hdr.seq & 0xFF),
                pkt->hdr.seq_port);
 
-        //TODO: send packet to SPI interface
+        bool arq = true; //wrapper->options && S3TP_OPTION_ARQ;
+        linkInterface->sendFrame(arq, wrapper->channel, pkt, sizeof(S3TP_PACKET));
         delete wrapper;
         pthread_mutex_lock(&tx_mutex);
     }
@@ -59,7 +65,7 @@ void * TxModule::staticTxRoutine(void * args) {
 //Public methods
 void TxModule::startRoutine(Transceiver::LinkInterface * spi_if) {
     pthread_mutex_lock(&tx_mutex);
-    spi_interface = spi_if;
+    linkInterface = spi_if;
     active = true;
     int txId = pthread_create(&tx_thread, NULL, &TxModule::staticTxRoutine, this);
     pthread_mutex_unlock(&tx_mutex);
@@ -89,7 +95,11 @@ TxModule::STATE TxModule::getCurrentState() {
  * - port sequence;
  * - CRC.
  */
-int TxModule::enqueuePacket(S3TP_PACKET * packet, int frag_no, bool more_fragments, int spi_channel) {
+int TxModule::enqueuePacket(S3TP_PACKET * packet,
+                            uint8_t frag_no,
+                            bool more_fragments,
+                            uint8_t spi_channel,
+                            uint8_t options) {
     pthread_mutex_lock(&tx_mutex);
     if (!active) {
         //If is not active, do not attempt to enqueue something
@@ -110,7 +120,6 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet, int frag_no, bool more_fragmen
     packet->hdr.seq_port = port_sequence[packet->hdr.port]++;
     pthread_mutex_unlock(&tx_mutex);
 
-    //i8 crc = calc_checksum(packet->pdu, packet->hdr.pdu_length);
     char * dataPtr = (char *)packet->pdu;
     uint16_t crc = calc_checksum(dataPtr, packet->hdr.pdu_length);
     packet->hdr.crc = crc;

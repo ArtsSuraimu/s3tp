@@ -29,7 +29,7 @@ public:
     STATE getCurrentState();
     void startRoutine(Transceiver::LinkInterface * spi_if);
     void stopRoutine();
-    int enqueuePacket(S3TP_PACKET * packet, int frag_no, bool more_fragments, int spi_channel);
+    int enqueuePacket(S3TP_PACKET * packet, uint8_t frag_no, bool more_fragments, uint8_t spi_channel, uint8_t options);
 
 private:
     STATE state;
@@ -42,7 +42,6 @@ private:
 
     std::map<uint8_t, uint8_t> port_sequence;
     Buffer outBuffer;
-    void * spi_interface;
 
     void txRoutine();
     static void * staticTxRoutine(void * args);
