@@ -10,10 +10,9 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "../connector/s3tp_shared.h"
-#include "s3tp_main.h"
-#include "connection_listener.h"
+#include "ClientInterface.h"
 
-class client {
+class Client {
 private:
     pthread_t client_thread;
     pthread_mutex_t client_mutex;
@@ -22,8 +21,7 @@ private:
     uint8_t app_port;
     uint8_t virtual_channel;
     uint8_t options;
-    connection_listener * listener;
-    s3tp_main * s3tp;
+    ClientInterface * client_if;
 
     bool isConnected();
     void closeConnection();
@@ -32,7 +30,9 @@ private:
     void clientRoutine();
     static void * staticClientRoutine(void * args);
 public:
-    client(SOCKET socket, S3TP_CONFIG config, s3tp_main * s3tp, connection_listener * listener);
+    Client(SOCKET socket, S3TP_CONFIG config, ClientInterface * listener);
+    uint8_t getAppPort();
+    uint8_t getVirtualChannel();
     int send(const void * data, size_t len);
     void kill();
 };
