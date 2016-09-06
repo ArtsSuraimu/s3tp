@@ -10,11 +10,17 @@ RxModule::RxModule() {
     received_packets = 0;
     pthread_mutex_init(&rx_mutex, NULL);
     pthread_cond_init(&available_msg_cond, NULL);
-    active = true;
 }
 
 RxModule::~RxModule() {
     //TODO: implement. Also remember to close all ports
+}
+
+void RxModule::startModule(S3tpStatusInterface * statusInterface) {
+    global_seq_num = 0;
+    received_packets = 0;
+    active = true;
+    this->statusInterface = statusInterface;
 }
 
 void RxModule::stopModule() {
@@ -33,6 +39,9 @@ bool RxModule::isActive() {
     return result;
 }
 
+/*
+ * Callback implementation
+ */
 void RxModule::handleFrame(bool arq, int channel, const void* data, int length) {
     if (length != MAX_LEN_S3TP_PACKET) {
         //TODO: handle error
@@ -42,7 +51,7 @@ void RxModule::handleFrame(bool arq, int channel, const void* data, int length) 
 }
 
 void RxModule::handleLinkStatus(bool linkStatus) {
-    //TODO: Link status changed, what to do?
+    statusInterface->onLinkStatusChanged(linkStatus);
 }
 
 int RxModule::openPort(uint8_t port) {

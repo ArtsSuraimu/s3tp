@@ -8,6 +8,7 @@
 #include "Buffer.h"
 #include "constants.h"
 #include "utilities.h"
+#include "S3tpStatusInterface.h"
 #include <cstring>
 #include <map>
 #include <trctrl/LinkCallback.h>
@@ -27,6 +28,7 @@ public:
     RxModule();
     ~RxModule();
 
+    void startModule(S3tpStatusInterface * statusInterface);
     void stopModule();
     int openPort(uint8_t port);
     int closePort(uint8_t port);
@@ -38,9 +40,11 @@ private:
     bool active;
     Buffer inBuffer;
     uint8_t global_seq_num;
-    uint64_t received_packets;
+    uint32_t received_packets;
     pthread_mutex_t rx_mutex;
     pthread_cond_t available_msg_cond;
+
+    S3tpStatusInterface * statusInterface;
 
     std::map<uint8_t, uint8_t> current_port_sequence;
     std::map<uint8_t, uint8_t> available_messages;
