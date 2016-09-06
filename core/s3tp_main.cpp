@@ -25,6 +25,7 @@ int s3tp_main::init() {
     desc.interrupt = PinMapper::find("P8_45");
     transceiver = Transceiver::BackendFactory::fromSPI(desc, rx);
     transceiver->start();
+    rx.startModule(this);
     tx.startRoutine(rx.link);
 
     int id = pthread_create(&assembly_thread, NULL, &staticAssemblyRoutine, this);
@@ -57,14 +58,18 @@ int s3tp_main::stop() {
 }
 
 Client * s3tp_main::getClientConnectedToPort(uint8_t port) {
+    pthread_mutex_lock(&clients_mutex);
     std::map<uint8_t, Client *>::iterator it = clients.find(port);
     if (it == clients.end()) {
+        pthread_mutex_unlock(&clients_mutex);
         return NULL;
     }
-    return it->second;
+    Client * cli = it->second;
+    pthread_mutex_unlock(&clients_mutex);
+    return cli;
 }
 
-int s3tp_main::sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len) {
+int s3tp_main::sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
     /* As messages should still be sent out sequentially,
      * we're putting all of them into the fragmentation queue.
      * Fragmentation thread will then be in charge of checking
@@ -78,16 +83,16 @@ int s3tp_main::sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_
             return CODE_ERROR_MAX_MESSAGE_SIZE;
         } else if (len > LEN_S3TP_PDU) {
             //Packet needs fragmentation
-            return fragmentPayload(channel, port, data, len);
+            return fragmentPayload(channel, port, data, len, opts);
         } else {
             //Payload fits into one packet
-            return sendSimplePayload(channel, port, data, len);
+            return sendSimplePayload(channel, port, data, len, opts);
         }
     }
     return CODE_INTERNAL_ERROR;
 }
 
-int s3tp_main::sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t len) {
+int s3tp_main::sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
     S3TP_PACKET * packet;
     int status = 0;
 
@@ -97,13 +102,13 @@ int s3tp_main::sendSimplePayload(uint8_t channel, uint8_t port, void * data, siz
     packet->hdr.port = port;
     packet->hdr.pdu_length = (uint16_t)len;
     pthread_mutex_lock(&s3tp_mutex);
-    status = tx.enqueuePacket(packet, 0, false, channel);
+    status = tx.enqueuePacket(packet, 0, false, channel, opts);
     pthread_mutex_unlock(&s3tp_mutex);
 
     return status;
 }
 
-int s3tp_main::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len) {
+int s3tp_main::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
     S3TP_PACKET * packet;
 
     //Need to fragment
@@ -131,7 +136,7 @@ int s3tp_main::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_
         //Send to Tx Module
         pthread_mutex_lock(&s3tp_mutex);
         //TODO: make enqueue an atomic operation
-        status = tx.enqueuePacket(packet, fragment, moreFragments, channel);
+        status = tx.enqueuePacket(packet, fragment, moreFragments, channel, opts);
         pthread_mutex_unlock(&s3tp_mutex);
         if (status != CODE_SUCCESS) {
             return status;
@@ -182,13 +187,18 @@ void * s3tp_main::staticAssemblyRoutine(void * args) {
     return NULL;
 }
 
-//Client Interface logic
+/*
+ * Client Interface logic
+ */
 void s3tp_main::onDisconnected(void * params) {
-    uint8_t * app_port = (uint8_t *)params;
+    Client * cli = (Client *)params;
     //Client disconnected from port. Mark that port as available again.
-    pthread_mutex_lock(&clients_mutex);
-    clients.erase(*app_port);
-    pthread_mutex_unlock(&clients_mutex);
+    if (this->getClientConnectedToPort(cli->getAppPort()) == cli) {
+        pthread_mutex_lock(&clients_mutex);
+        clients.erase(cli->getAppPort());
+        pthread_mutex_unlock(&clients_mutex);
+        delete cli;
+    }
 }
 
 void s3tp_main::onConnected(void * params) {
@@ -196,8 +206,17 @@ void s3tp_main::onConnected(void * params) {
     pthread_mutex_lock(&clients_mutex);
     clients[cli->getAppPort()] = cli;
     pthread_mutex_unlock(&clients_mutex);
+    rx.openPort(cli->getAppPort());
 }
 
-int s3tp_main::onApplicationMessage(uint8_t channel, uint8_t port, void * data, size_t len) {
-    return sendToLinkLayer(channel, port, data, len);
+int s3tp_main::onApplicationMessage(void * data, size_t len, void * params) {
+    Client * cli = (Client *)params;
+    return sendToLinkLayer(cli->getVirtualChannel(), cli->getAppPort(), data, len, cli->getOptions());
+}
+
+/*
+ * Status callbacks
+ */
+void s3tp_main::onLinkStatusChanged(bool active) {
+
 }

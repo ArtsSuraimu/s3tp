@@ -9,6 +9,7 @@
 #include "RxModule.h"
 #include "SimpleQueue.h"
 #include "ClientInterface.h"
+#include "S3tpStatusInterface.h"
 #include "Client.h"
 #include <cstring>
 #include <moveio/PinMapper.h>
@@ -18,13 +19,14 @@
 #define CODE_ERROR_MAX_MESSAGE_SIZE -2
 #define CODE_INTERNAL_ERROR -3
 
-class s3tp_main: public ClientInterface {
+class s3tp_main: public ClientInterface,
+                 public S3tpStatusInterface {
 public:
     s3tp_main();
     ~s3tp_main();
     int init();
     int stop();
-    int sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len);
+    int sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts);
     Client * getClientConnectedToPort(uint8_t port);
 
 private:
@@ -36,8 +38,8 @@ private:
 
     //TxModule
     TxModule tx;
-    int fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len);
-    int sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t len);
+    int fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts);
+    int sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts);
     //RxModule
     RxModule rx;
     void assemblyRoutine();
@@ -48,7 +50,10 @@ private:
     pthread_mutex_t clients_mutex;
     virtual void onDisconnected(void * params);
     virtual void onConnected(void * params);
-    virtual int onApplicationMessage(uint8_t channel, uint8_t port, void * data, size_t len);
+    virtual int onApplicationMessage(void * data, size_t len, void * params);
+
+    //Status check
+    virtual void onLinkStatusChanged(bool active);
 };
 
 
