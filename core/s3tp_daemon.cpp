@@ -87,9 +87,12 @@ void s3tp_daemon::startDaemon() {
                 close(new_socket);
                 continue;
             }
-            //Create new Client with app_port. Client automatically starts working in background (on a different thread)
-            Client * cli = new Client(new_socket, config, &s3tp);
-            //S3tp module gets notified automatically of the new connection through the Client interface callback
+            /*
+             * Create new Client with app_port.
+             * Client automatically starts working in background (on a different thread)
+             * S3tp module gets notified automatically of the new connection through the Client interface callback
+             */
+            new Client(new_socket, config, &s3tp);
         }
     }
 }

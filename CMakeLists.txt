@@ -34,7 +34,7 @@ set(SOURCE_FILES
         core/utilities.cpp
         core/Client.cpp
         core/Client.h
-        core/ClientInterface.h)
+        core/ClientInterface.h core/S3tpStatusInterface.h)
 
 add_executable(s3tp ${SOURCE_FILES})
 

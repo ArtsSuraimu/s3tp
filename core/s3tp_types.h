@@ -51,6 +51,7 @@ typedef struct tag_queue_data
 {
 	S3TP_PACKET * pkt;
 	uint8_t channel;			/* Logical Channel to be used on the SPI interface */
+	uint8_t options;
 }S3TP_PACKET_WRAPPER;
 
 #endif /* CORE_S3TP_TYPES_H_ */

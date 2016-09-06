@@ -13,6 +13,8 @@
 #include <string>
 #include "s3tp_daemon.h"
 
+const int default_opts = S3TP_OPTION_ARQ;
+
 int hexdump(const unsigned char *buffer, ssize_t len)
 {
 	int i,n;
@@ -116,20 +118,20 @@ void * publisherRoutine(void * arg) {
 		S3TP_PACKET * packet = new S3TP_PACKET();
 		packet->hdr.port = appPort;
 		printf("Enqueuing packet %d...\n", i);
-		tx->enqueuePacket(packet, 0, false, 0);
+		tx->enqueuePacket(packet, 0, false, 0, default_opts);
 	}
 	for (uint16_t i=100; i<110; i++) {
 		S3TP_PACKET * packet = new S3TP_PACKET();
 		packet->hdr.port = appPort;
 		printf("Enqueuing packet %d...\n", i);
-		tx->enqueuePacket(packet, 0, false, 0);
+		tx->enqueuePacket(packet, 0, false, 0, default_opts);
 		sleep(sleepSeconds);
 	}
 	for (uint16_t i=110; i<120; i++) {
 		S3TP_PACKET * packet = new S3TP_PACKET();
 		packet->hdr.port = appPort;
 		printf("Enqueuing packet %d...\n", i);
-		tx->enqueuePacket(packet, 0, false, 0);
+		tx->enqueuePacket(packet, 0, false, 0, default_opts);
 		sleep(sleepSeconds);
 	}
 
@@ -158,7 +160,7 @@ void * applicationRoutine(void * args) {
 	for (i=0; i<5; i++) {
 		len = rand() % LEN_S3TP_PDU;
 		message = new char[len];
-		result = main->sendToLinkLayer(0, appPort, message, (size_t)len);
+		result = main->sendToLinkLayer(0, appPort, message, (size_t)len, default_opts);
 		if (result != CODE_SUCCESS) {
 			printf("Error in sending message\n");
 		}
@@ -166,14 +168,14 @@ void * applicationRoutine(void * args) {
 	//Message to fragment
 	len = (rand() % (LEN_S3TP_PDU * 2)) + 2000;
 	message = new char[len];
-	result = main->sendToLinkLayer(0, appPort, message, (size_t)len);
+	result = main->sendToLinkLayer(0, appPort, message, (size_t)len, default_opts);
 	if (result != CODE_SUCCESS) {
 		printf("Error in sending message\n");
 	}
 	for (i=0; i<5; i++) {
 		len = rand() % LEN_S3TP_PDU;
 		message = new char[len];
-		result = main->sendToLinkLayer(0, appPort, message, (size_t)len);
+		result = main->sendToLinkLayer(0, appPort, message, (size_t)len, default_opts);
 		if (result != CODE_SUCCESS) {
 			printf("Error in sending message\n");
 		}
