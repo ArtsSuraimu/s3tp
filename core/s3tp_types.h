@@ -11,9 +11,6 @@
 #include <stdlib.h>
 #include "constants.h"
 
-#define IN
-#define OUT
-
 typedef int SOCKET;
 
 #pragma pack(push, 1)
@@ -55,13 +52,5 @@ typedef struct tag_queue_data
 	S3TP_PACKET * pkt;
 	uint8_t channel;			/* Logical Channel to be used on the SPI interface */
 }S3TP_PACKET_WRAPPER;
-
-//typedef void (*S3TP_CALLBACK) (void* pData);
-
-// USE THE DRIVERS INSTEAD!
-typedef size_t (*RAW_SEND) (SOCKET socket, const void * buffer, size_t length, int flags);
-typedef size_t (*RAW_RECV) (SOCKET socekt, char * buf, int len, int flags);
-typedef size_t (*ISR_RECV) (uint8_t identifier, int8_t seq, const void * buffer);
-
 
 #endif /* CORE_S3TP_TYPES_H_ */
