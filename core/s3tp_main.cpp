@@ -14,6 +14,7 @@ s3tp_main::~s3tp_main() {
 }
 
 int s3tp_main::init() {
+    pthread_mutex_init(&clients_mutex, NULL);
     pthread_mutex_init(&s3tp_mutex, NULL);
     pthread_mutex_lock(&s3tp_mutex);
     active = true;
@@ -55,7 +56,15 @@ int s3tp_main::stop() {
     return CODE_SUCCESS;
 }
 
-int s3tp_main::send(uint8_t channel, uint8_t port, void * data, size_t len) {
+Client * s3tp_main::getClientConnectedToPort(uint8_t port) {
+    std::map<uint8_t, Client *>::iterator it = clients.find(port);
+    if (it == clients.end()) {
+        return NULL;
+    }
+    return it->second;
+}
+
+int s3tp_main::sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len) {
     /* As messages should still be sent out sequentially,
      * we're putting all of them into the fragmentation queue.
      * Fragmentation thread will then be in charge of checking
@@ -140,6 +149,8 @@ void s3tp_main::assemblyRoutine() {
     uint16_t len;
     int error;
     char * data;
+    Client * cli;
+    uint8_t  port;
 
     //TODO: implement routine
     pthread_mutex_lock(&s3tp_mutex);
@@ -149,8 +160,16 @@ void s3tp_main::assemblyRoutine() {
             continue;
         }
         pthread_mutex_unlock(&s3tp_mutex);
-        data = rx.getNextCompleteMessage(&len, &error);
-        //TODO: handle callback and send data to client. ALso check for errors
+        data = rx.getNextCompleteMessage(&len, &error, &port);
+        if (error != CODE_SUCCESS) {
+            LOG_DBG_S3TP("Error while trying to consume message\n");
+        }
+        pthread_mutex_lock(&clients_mutex);
+        cli = clients[port];
+        cli->send(data, len);
+        pthread_mutex_unlock(&clients_mutex);
+
+        pthread_mutex_lock(&s3tp_mutex);
     }
     //S3TP (or Rx module) was deactivated
     pthread_mutex_unlock(&s3tp_mutex);
@@ -161,4 +180,24 @@ void s3tp_main::assemblyRoutine() {
 void * s3tp_main::staticAssemblyRoutine(void * args) {
     static_cast<s3tp_main*>(args)->assemblyRoutine();
     return NULL;
+}
+
+//Client Interface logic
+void s3tp_main::onDisconnected(void * params) {
+    uint8_t * app_port = (uint8_t *)params;
+    //Client disconnected from port. Mark that port as available again.
+    pthread_mutex_lock(&clients_mutex);
+    clients.erase(*app_port);
+    pthread_mutex_unlock(&clients_mutex);
+}
+
+void s3tp_main::onConnected(void * params) {
+    Client * cli = (Client * )params;
+    pthread_mutex_lock(&clients_mutex);
+    clients[cli->getAppPort()] = cli;
+    pthread_mutex_unlock(&clients_mutex);
+}
+
+int s3tp_main::onApplicationMessage(uint8_t channel, uint8_t port, void * data, size_t len) {
+    return sendToLinkLayer(channel, port, data, len);
 }
