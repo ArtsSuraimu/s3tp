@@ -14,6 +14,8 @@ int s3tp_daemon::init(void * args) {
     address.sun_family = AF_UNIX;
     strcpy(address.sun_path, socket_path);
 
+    int reuse = 1;
+    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int));
     if (bind(server, (struct sockaddr *) &address, sizeof (address)) != 0) {
         printf("Error binding socket\n");
         return CODE_ERROR_SOCKET_BIND;
@@ -70,7 +72,7 @@ void s3tp_daemon::startDaemon() {
 
         printf("Received following data from Client %d: port %d, channel %d\n", new_socket, config.port, config.channel);
         tv.tv_sec = 0;
-        setsockopt(new_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,sizeof(struct timeval));
+        setsockopt(new_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
         if (s3tp.getClientConnectedToPort(config.port) != NULL) {
             //A Client is already registered to this port
             commCode = CODE_SERVER_PORT_BUSY;
