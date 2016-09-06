@@ -17,22 +17,17 @@
 #include <pthread.h>
 #include <map>
 #include <csignal>
-#include "client.h"
-#include "connection_listener.h"
+#include "s3tp_main.h"
 
-class s3tp_daemon: connection_listener {
+class s3tp_daemon {
 private:
     sockaddr_un address;
     SOCKET server;
     s3tp_main s3tp;
-    std::map<uint8_t, client*> clients;
-    pthread_mutex_t clients_mutex;
+
 public:
     int init();
     void startDaemon();
-
-    virtual void onDisconnected(void * params);
-    virtual void onConnected(void * params);
 };
 
 
