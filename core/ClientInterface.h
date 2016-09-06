@@ -5,10 +5,11 @@
 #ifndef S3TP_CONNECTION_LISTENER_H
 #define S3TP_CONNECTION_LISTENER_H
 
-class connection_listener {
+class ClientInterface {
 public:
     virtual void onDisconnected(void * params) = 0;
     virtual void onConnected(void * params) = 0;
+    virtual int onApplicationMessage(uint8_t channel, uint8_t port, void * data, size_t len) = 0;
 };
 
 #endif //S3TP_CONNECTION_LISTENER_H
