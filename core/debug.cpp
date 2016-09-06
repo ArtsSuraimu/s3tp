@@ -35,7 +35,7 @@ int hexdump(const unsigned char *buffer, ssize_t len)
 }
 
 void queueTest() {
-	PriorityQueue * root = (PriorityQueue *) init_queue();
+	PriorityQueue * root = init_queue();
 	S3TP_PACKET * pack;
 	S3TP_PACKET_WRAPPER * wrapper;
 	for (uint16_t i=1050; i>750; i--) {
@@ -185,7 +185,7 @@ void * applicationRoutine(void * args) {
 
 void s3tpMainModuleTest() {
 	s3tp_main main;
-	main.init();
+	//main.init();
 	pthread_t appThread1;
 	pthread_t appThread2;
 	pthread_create(&appThread1, NULL, applicationRoutine, &main);
@@ -233,11 +233,12 @@ void crcTest() {
 
 void daemonTest() {
 	s3tp_daemon testDaemon;
-	int result = testDaemon.init();
+	int result = -1; //testDaemon.init();
 	if (result != 0) {
-		printf("Exiting..\n");
+		LOG_DBG_S3TP("Couldn't init daemon. Exiting..\n");
 	}
 	testDaemon.startDaemon();
+    LOG_DBG_S3TP("Daemon killed\n");
 }
 
 int main(int argc, char**argv) {
@@ -246,6 +247,6 @@ int main(int argc, char**argv) {
 	//txModuleTest();
 	//simpleQueueTest();
 	//s3tpMainModuleTest();
-	crcTest();
+	//crcTest();
 	daemonTest();
 }

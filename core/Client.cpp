@@ -163,11 +163,11 @@ void Client::clientRoutine() {
             //TODO: kill connection?!
         } else {
             //Dummy echo mechanism
-            sleep(1);
+            /*sleep(1);
             error = send(message, len);
             if (error != CODE_SUCCESS) {
                 break;
-            }
+            }*/
         }
     }
 
