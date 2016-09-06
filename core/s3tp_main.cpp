@@ -37,19 +37,19 @@ int s3tp_main::stop() {
     //Deactivating module
     pthread_mutex_lock(&s3tp_mutex);
     active = false;
-    //pthread_join(fragmentation_thread, NULL);
-
-    //TODO: Quit assembly thread
-    pthread_mutex_unlock(&s3tp_mutex);
-    pthread_join(assembly_thread, NULL);
 
     //Stop modules connected to Link Layer
-    pthread_mutex_lock(&s3tp_mutex);
     tx.stopRoutine();
     rx.stopModule();
+    pthread_mutex_unlock(&s3tp_mutex);
+
+    //Wait for assembly thread to finish
+    pthread_join(assembly_thread, NULL);
+
+    //Stop the transceiver instance
+    pthread_mutex_lock(&s3tp_mutex);
     transceiver->stop();
     delete transceiver;
-
     pthread_mutex_unlock(&s3tp_mutex);
 
     return CODE_SUCCESS;
@@ -137,8 +137,25 @@ int s3tp_main::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_
  * Assembly Thread logic
  */
 void s3tp_main::assemblyRoutine() {
+    uint16_t len;
+    int error;
+    char * data;
+
     //TODO: implement routine
-    //while ()
+    pthread_mutex_lock(&s3tp_mutex);
+    while(active && rx.isActive()) {
+        if (!rx.isNewMessageAvailable()) {
+            rx.waitForNextAvailableMessage(&s3tp_mutex);
+            continue;
+        }
+        pthread_mutex_unlock(&s3tp_mutex);
+        data = rx.getNextCompleteMessage(&len, &error);
+        //TODO: handle callback and send data to client. ALso check for errors
+    }
+    //S3TP (or Rx module) was deactivated
+    pthread_mutex_unlock(&s3tp_mutex);
+
+    pthread_exit(NULL);
 }
 
 void * s3tp_main::staticAssemblyRoutine(void * args) {
