@@ -34,6 +34,7 @@ set(SOURCE_FILES
         core/Client.h
         core/ClientInterface.h
         core/S3tpStatusInterface.h
+        core/PriorityComparator.h
         test/s3tp_start.cpp)
 
 add_executable(s3tp ${SOURCE_FILES})

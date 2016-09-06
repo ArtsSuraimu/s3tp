@@ -5,7 +5,7 @@
  *      Author: dai
  */
 
-#include "PriorityQueue.h"
+/*#include "PriorityQueue.h"
 #include <string.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -39,7 +39,7 @@ int push (PriorityQueue* root, S3TP_PACKET_WRAPPER* packet) {
 
 	//Creating new node
 	newNode = (PriorityQueue_node*) calloc(1, sizeof(PriorityQueue_node));
-	newNode->payload = packet;
+	newNode->element = packet;
 
 	//Inserting new node inside the priority queue
 	ref = root->tail;
@@ -51,7 +51,7 @@ int push (PriorityQueue* root, S3TP_PACKET_WRAPPER* packet) {
 			break;
 		}
 			//TODO: implement properly, with correct seq check
-		else if (ref->payload->pkt->hdr.seq < data->hdr.seq) {
+		else if (ref->element->pkt->hdr.seq < data->hdr.seq) {
 			//New node has higher sequence number than current element. New node has lower priority -> append it here
 			swap = ref->next;
 			ref->next = newNode;
@@ -89,7 +89,7 @@ S3TP_PACKET_WRAPPER* peek (PriorityQueue* root) {
 	pthread_mutex_lock(&root->q_mutex);
 	PriorityQueue_node * head = root->head;
 	if (head != NULL) {
-		pack = head->payload;
+		pack = head->element;
 	}
 	pthread_mutex_unlock(&root->q_mutex);
 
@@ -119,7 +119,7 @@ S3TP_PACKET_WRAPPER* pop (PriorityQueue* root) {
 		ref->next->prev = NULL;
 	}
 
-	pack = ref->payload;
+	pack = ref->element;
 	free(ref);
 
 	//Decrease current buffer size
@@ -154,4 +154,4 @@ bool isEmpty(PriorityQueue * root) {
 	result = root->size == 0;
 	pthread_mutex_unlock(&root->q_mutex);
 	return result;
-}
+}*/
