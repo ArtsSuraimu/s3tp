@@ -47,7 +47,7 @@ void TxModule::txRoutine() {
                (pkt->hdr.seq & 0xFF),
                pkt->hdr.seq_port);
 
-        bool arq = true; //wrapper->options && S3TP_OPTION_ARQ;
+        bool arq = wrapper->options && S3TP_ARQ;
         linkInterface->sendFrame(arq, wrapper->channel, pkt, sizeof(S3TP_PACKET));
         delete wrapper;
         pthread_mutex_lock(&tx_mutex);
@@ -84,6 +84,12 @@ TxModule::STATE TxModule::getCurrentState() {
     STATE current = state;
     pthread_mutex_unlock(&tx_mutex);
     return current;
+}
+
+void TxModule::notifyLinkAvailability(bool available) {
+    if (available) {
+        pthread_cond_signal(&tx_cond);
+    }
 }
 
 /**

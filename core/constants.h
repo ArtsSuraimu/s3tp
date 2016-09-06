@@ -43,6 +43,8 @@
 #define RST 0x21
 #define SYN 0x29
 
+#define S3TP_ARQ 0x01;
+
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define MIN(a,b) (((a) > (b)) ? (a) : (b))
 
