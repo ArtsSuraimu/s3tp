@@ -33,7 +33,7 @@ public:
     bool isActive();
     bool isNewMessageAvailable();
     void waitForNextAvailableMessage(pthread_mutex_t * callerMutex);
-    char * getNextCompleteMessage(uint16_t * len, int * error);
+    char * getNextCompleteMessage(uint16_t * len, int * error, uint8_t * port);
 private:
     bool active;
     Buffer inBuffer;

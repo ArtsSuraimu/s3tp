@@ -170,8 +170,9 @@ void RxModule::waitForNextAvailableMessage(pthread_mutex_t * callerMutex) {
     pthread_cond_wait(&available_msg_cond, callerMutex);
 }
 
-char * RxModule::getNextCompleteMessage(uint16_t * len, int * error) {
+char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * port) {
     *len = 0;
+    *port = 0;
     *error = CODE_SUCCESS;
     if (!isActive()) {
         *error = MODULE_INACTIVE;
@@ -197,6 +198,7 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error) {
         *len += pkt->hdr.pdu_length;
         current_port_sequence[it->first]++;
         if (!pkt->hdr.moreFragments()) {
+            *port = it->first;
             messageAssembled = true;
         }
     }

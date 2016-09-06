@@ -32,9 +32,9 @@ set(SOURCE_FILES
         core/s3tp_daemon.h
         core/utilities.h
         core/utilities.cpp
-        core/client.cpp
-        core/client.h
-        core/connection_listener.h)
+        core/Client.cpp
+        core/Client.h
+        core/ClientInterface.h)
 
 add_executable(s3tp ${SOURCE_FILES})
 

@@ -158,7 +158,7 @@ void * applicationRoutine(void * args) {
 	for (i=0; i<5; i++) {
 		len = rand() % LEN_S3TP_PDU;
 		message = new char[len];
-		result = main->send(0, appPort, message, (size_t)len);
+		result = main->sendToLinkLayer(0, appPort, message, (size_t)len);
 		if (result != CODE_SUCCESS) {
 			printf("Error in sending message\n");
 		}
@@ -166,14 +166,14 @@ void * applicationRoutine(void * args) {
 	//Message to fragment
 	len = (rand() % (LEN_S3TP_PDU * 2)) + 2000;
 	message = new char[len];
-	result = main->send(0, appPort, message, (size_t)len);
+	result = main->sendToLinkLayer(0, appPort, message, (size_t)len);
 	if (result != CODE_SUCCESS) {
 		printf("Error in sending message\n");
 	}
 	for (i=0; i<5; i++) {
 		len = rand() % LEN_S3TP_PDU;
 		message = new char[len];
-		result = main->send(0, appPort, message, (size_t)len);
+		result = main->sendToLinkLayer(0, appPort, message, (size_t)len);
 		if (result != CODE_SUCCESS) {
 			printf("Error in sending message\n");
 		}
