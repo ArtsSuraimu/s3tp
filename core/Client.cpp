@@ -32,6 +32,10 @@ uint8_t Client::getVirtualChannel() {
     return virtual_channel;
 }
 
+uint8_t Client::getOptions() {
+    return options;
+}
+
 void Client::closeConnection() {
     pthread_mutex_lock(&client_mutex);
     if (connected) {
@@ -42,7 +46,7 @@ void Client::closeConnection() {
     pthread_mutex_unlock(&client_mutex);
     //Notifying s3tp that a port is available again
     if (client_if != NULL) {
-        client_if->onDisconnected(&app_port);
+        client_if->onDisconnected(this);
     }
 }
 
@@ -73,12 +77,31 @@ void Client::kill() {
 }
 
 int Client::send(const void * data, size_t len) {
-    //TODO: implement
-    return 0;
+    int error = write_length_safe(socket, len);
+    if (error == CODE_ERROR_SOCKET_NO_CONN) {
+        printf("Connection was closed by peer\n");
+        handleConnectionClosed();
+        return error;
+    } else if (error == CODE_ERROR_SOCKET_WRITE) {
+        printf("Error while writing on socket\n");
+        closeConnection();
+        return error;
+    }
+    ssize_t wr = write(socket, data, len);
+    if (wr == 0) {
+        printf("Error while writing echo response\n");
+        handleConnectionClosed();
+        return CODE_ERROR_SOCKET_NO_CONN;
+    } else if (wr < 0) {
+        printf("Error while writing echo response\n");
+        closeConnection();
+        return CODE_ERROR_SOCKET_WRITE;
+    }
+    return CODE_SUCCESS;
 }
 
 void Client::clientRoutine() {
-    ssize_t i = 0, rd = 0, wr = 0;
+    ssize_t i = 0, rd = 0;
     size_t len = 0;
     int error = 0;
 
@@ -134,31 +157,15 @@ void Client::clientRoutine() {
             break;
         }
         //Forward data to s3tp module (through Client interface callback)
-        int result = client_if->onApplicationMessage(virtual_channel, app_port, message, len);
+        int result = client_if->onApplicationMessage(message, len, this);
         if (result < 0) {
             printf("Error while communicating with s3tp module %d\n", socket);
             //TODO: kill connection?!
         } else {
             //Dummy echo mechanism
             sleep(1);
-            error = write_length_safe(socket, len);
-            if (error == CODE_ERROR_SOCKET_NO_CONN) {
-                printf("Connection was closed by peer\n");
-                handleConnectionClosed();
-                break;
-            } else if (error == CODE_ERROR_SOCKET_WRITE) {
-                printf("Error while writing on socket\n");
-                closeConnection();
-                break;
-            }
-            wr = write(socket, message, len);
-            if (wr == 0) {
-                printf("Error while writing echo response\n");
-                handleConnectionClosed();
-                break;
-            } else if (wr < 0) {
-                printf("Error while writing echo response\n");
-                closeConnection();
+            error = send(message, len);
+            if (error != CODE_SUCCESS) {
                 break;
             }
         }

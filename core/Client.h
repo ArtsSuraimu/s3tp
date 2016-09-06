@@ -33,6 +33,7 @@ public:
     Client(SOCKET socket, S3TP_CONFIG config, ClientInterface * listener);
     uint8_t getAppPort();
     uint8_t getVirtualChannel();
+    uint8_t getOptions();
     int send(const void * data, size_t len);
     void kill();
 };
