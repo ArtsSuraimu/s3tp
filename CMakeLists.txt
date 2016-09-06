@@ -14,8 +14,6 @@ set(SOURCE_FILES
         connector/s3tp_shared.h
         connector/s3tp_shared.cpp
         core/constants.h
-        core/debug.cpp
-        core/debug.h
         core/PriorityQueue.cpp
         core/PriorityQueue.h
         core/s3tp_types.h
@@ -34,7 +32,9 @@ set(SOURCE_FILES
         core/utilities.cpp
         core/Client.cpp
         core/Client.h
-        core/ClientInterface.h core/S3tpStatusInterface.h)
+        core/ClientInterface.h
+        core/S3tpStatusInterface.h
+        test/s3tp_start.cpp)
 
 add_executable(s3tp ${SOURCE_FILES})
 
