@@ -13,17 +13,17 @@ s3tp_main::~s3tp_main() {
     pthread_mutex_destroy(&s3tp_mutex);
 }
 
-int s3tp_main::init() {
+int s3tp_main::init(TRANSCEIVER_CONFIG * config) {
     pthread_mutex_init(&clients_mutex, NULL);
     pthread_mutex_init(&s3tp_mutex, NULL);
     pthread_mutex_lock(&s3tp_mutex);
     active = true;
 
-    //Creating spi interface
-    Transceiver::SPIDescriptor desc;
-    desc.spi = "/dev/spidev1.1#P8_46";
-    desc.interrupt = PinMapper::find("P8_45");
-    transceiver = Transceiver::BackendFactory::fromSPI(desc, rx);
+    if (config->type == SPI) {
+        transceiver = Transceiver::BackendFactory::fromSPI(config->descriptor, rx);
+    } else if (config->type == FIRE) {
+        transceiver = Transceiver::BackendFactory::fromFireTcp(config->mappings, rx);
+    }
     transceiver->start();
     rx.startModule(this);
     tx.startRoutine(rx.link);

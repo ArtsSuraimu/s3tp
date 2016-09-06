@@ -14,17 +14,30 @@
 #include <cstring>
 #include <moveio/PinMapper.h>
 #include <trctrl/BackendFactory.h>
+#include <string>
+#include <vector>
 
 #define CODE_SUCCESS 0
 #define CODE_ERROR_MAX_MESSAGE_SIZE -2
 #define CODE_INTERNAL_ERROR -3
+
+enum TRANSCEIVER_TYPE {
+    SPI,
+    FIRE
+};
+
+typedef struct transceiver_factory_config {
+    TRANSCEIVER_TYPE type;
+    std::vector<Transceiver::FireTcpPair> mappings;
+    Transceiver::SPIDescriptor descriptor;
+}TRANSCEIVER_CONFIG;
 
 class s3tp_main: public ClientInterface,
                  public S3tpStatusInterface {
 public:
     s3tp_main();
     ~s3tp_main();
-    int init();
+    int init(TRANSCEIVER_CONFIG * config);
     int stop();
     int sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts);
     Client * getClientConnectedToPort(uint8_t port);

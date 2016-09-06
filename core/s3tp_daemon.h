@@ -26,7 +26,7 @@ private:
     s3tp_main s3tp;
 
 public:
-    int init();
+    int init(void * args);
     void startDaemon();
 };
 

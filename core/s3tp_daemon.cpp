@@ -5,7 +5,7 @@
 #include "s3tp_daemon.h"
 
 
-int s3tp_daemon::init() {
+int s3tp_daemon::init(void * args) {
     if ((server = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
         printf("Error creating socket\n");
         return CODE_ERROR_SOCKET_CREATE;
@@ -19,7 +19,9 @@ int s3tp_daemon::init() {
         return CODE_ERROR_SOCKET_BIND;
     }
 
-    s3tp.init();
+    TRANSCEIVER_CONFIG * config = (TRANSCEIVER_CONFIG *)args;
+
+    s3tp.init(config);
 
     return CODE_SUCCESS;
 }
