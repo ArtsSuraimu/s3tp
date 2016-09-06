@@ -51,7 +51,9 @@ void RxModule::handleFrame(bool arq, int channel, const void* data, int length) 
 }
 
 void RxModule::handleLinkStatus(bool linkStatus) {
-    statusInterface->onLinkStatusChanged(linkStatus);
+    if (statusInterface != NULL) {
+        statusInterface->onLinkStatusChanged(linkStatus);
+    }
 }
 
 int RxModule::openPort(uint8_t port) {
