@@ -5,7 +5,7 @@
 #include "../core/s3tp_daemon.h"
 
 int main(int argc, char ** argv) {
-    if (argc != 1) {
+    if (argc != 2) {
         printf("Invalid arguments\n");
         return -1;
     }
@@ -14,7 +14,7 @@ int main(int argc, char ** argv) {
     TRANSCEIVER_CONFIG config;
 
     //Creating spi interface
-    char * transceiverType = argv[0];
+    char * transceiverType = argv[1];
     if (strcmp(transceiverType, "spi") == 0) {
         config.type = SPI;
         Transceiver::SPIDescriptor desc;
@@ -24,8 +24,11 @@ int main(int argc, char ** argv) {
         config.type = FIRE;
         Transceiver::FireTcpPair pair;
         pair.port = 2000;
-        pair.channel = 0;
+        pair.channel = 3;
         config.mappings.push_back(pair);
+    } else {
+        printf("Invalid parameters\n");
+        return -2;
     }
 
     daemon.init(&config);
