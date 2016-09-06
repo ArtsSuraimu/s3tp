@@ -18,6 +18,7 @@
 #define PORT_CLOSED 0
 #define MODULE_INACTIVE -2
 #define CODE_ERROR_CRC_INVALID -3
+#define NO_MESSAGES_AVAILABLE -4
 
 #define MAX_REORDERING_WINDOW 256
 
@@ -31,7 +32,8 @@ public:
     int closePort(uint8_t port);
     bool isActive();
     bool isNewMessageAvailable();
-    S3TP_PACKET_WRAPPER * consumeNextAvailableMessage();
+    void waitForNextAvailableMessage(pthread_mutex_t * callerMutex);
+    char * getNextCompleteMessage(uint16_t * len, int * error);
 private:
     bool active;
     Buffer inBuffer;
@@ -41,12 +43,14 @@ private:
     pthread_cond_t available_msg_cond;
 
     std::map<uint8_t, uint8_t> current_port_sequence;
+    std::map<uint8_t, uint8_t> available_messages;
 
     // LinkCallback
     void handleFrame(bool arq, int channel, const void* data, int length);
     int handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel);
     void handleLinkStatus(bool linkStatus);
     bool isPortOpen(uint8_t port);
+    bool isCompleteMessageForPortAvailable(int port);
     //void consumeQueue(uint8_t port);
 };
 
