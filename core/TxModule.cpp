@@ -7,6 +7,7 @@
 //Ctor
 TxModule::TxModule() {
     state = WAITING;
+    global_seq_num = 0;
     pthread_mutex_init(&tx_mutex, NULL);
     pthread_cond_init(&tx_cond, NULL);
     outBuffer = new Buffer(this);
@@ -43,7 +44,7 @@ void TxModule::txRoutine() {
         pthread_mutex_unlock(&tx_mutex);
         S3TP_PACKET * pkt = wrapper->pkt;
         printf("TX: Packet sent from port %d to SPI -> glob_seq %d; sub_seq %d; port_seq %d\n",
-               pkt->hdr.port & 0x7F,
+               pkt->hdr.getPort(),
                (pkt->hdr.seq >> 8),
                (pkt->hdr.seq & 0xFF),
                pkt->hdr.seq_port);
@@ -115,7 +116,7 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
     }
     uint8_t global_seq = global_seq_num;
     uint8_t sub_seq = (uint8_t) frag_no;
-    packet->hdr.seq = (uint8_t)((global_seq << 8) | (sub_seq & 0xFF));
+    packet->hdr.seq = (uint16_t)((global_seq << 8) | (sub_seq & 0xFF));
     if (more_fragments) {
         packet->hdr.setMoreFragments();
     } else {
@@ -124,7 +125,8 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
         global_seq_num++;
     }
     //Increasing port sequence
-    packet->hdr.seq_port = port_sequence[packet->hdr.port]++;
+    int port = packet->hdr.getPort();
+    packet->hdr.seq_port = port_sequence[port]++;
     pthread_mutex_unlock(&tx_mutex);
 
     char * dataPtr = (char *)packet->pdu;
@@ -133,6 +135,7 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
 
     S3TP_PACKET_WRAPPER * wrapper = new S3TP_PACKET_WRAPPER();
     wrapper->pkt = packet;
+    wrapper->options = options;
     wrapper->channel = (uint8_t) spi_channel;
     outBuffer->write(wrapper);
     pthread_cond_signal(&tx_cond);

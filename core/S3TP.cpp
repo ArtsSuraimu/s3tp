@@ -99,7 +99,7 @@ int S3TP::sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t l
     //Send to Tx Module without fragmenting
     packet = new S3TP_PACKET();
     memcpy(packet->pdu, data, len);
-    packet->hdr.port = port;
+    packet->hdr.setPort(port);
     packet->hdr.pdu_length = (uint16_t)len;
     pthread_mutex_lock(&s3tp_mutex);
     status = tx.enqueuePacket(packet, 0, false, channel, opts);
@@ -114,12 +114,12 @@ int S3TP::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len
     //Need to fragment
     int written = 0;
     int status = 0;
-    int fragment = 0;
+    uint8_t fragment = 0;
     bool moreFragments = true;
     uint8_t * dataPtr = (uint8_t *) data;
     while (written < len) {
         packet = new S3TP_PACKET();
-        packet->hdr.port = port;
+        packet->hdr.setPort(port);
         if (written + LEN_S3TP_PDU > len) {
             //We are at the last packet, so don't need to write max payload
             memcpy(packet->pdu, dataPtr, len - written);
@@ -134,10 +134,7 @@ int S3TP::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len
             moreFragments = false;
         }
         //Send to Tx Module
-        pthread_mutex_lock(&s3tp_mutex);
-        //TODO: make enqueue an atomic operation
         status = tx.enqueuePacket(packet, fragment, moreFragments, channel, opts);
-        pthread_mutex_unlock(&s3tp_mutex);
         if (status != CODE_SUCCESS) {
             return status;
         }
@@ -157,7 +154,6 @@ void S3TP::assemblyRoutine() {
     Client * cli;
     uint8_t  port;
 
-    //TODO: implement routine
     pthread_mutex_lock(&s3tp_mutex);
     while(active && rx.isActive()) {
         if (!rx.isNewMessageAvailable()) {
@@ -169,9 +165,14 @@ void S3TP::assemblyRoutine() {
         if (error != CODE_SUCCESS) {
             LOG_DBG_S3TP("Error while trying to consume message\n");
         }
+        LOG_DBG_S3TP("Correctly consumed data from queue %d: %s\n", port, data);
         pthread_mutex_lock(&clients_mutex);
         cli = clients[port];
-        cli->send(data, len);
+        if (cli != NULL) {
+            cli->send(data, len);
+        } else {
+            printf("Port %d is not open. Couldn't forward data to application\n", port);
+        }
         pthread_mutex_unlock(&clients_mutex);
 
         pthread_mutex_lock(&s3tp_mutex);
@@ -196,6 +197,7 @@ void S3TP::onDisconnected(void * params) {
     if (this->getClientConnectedToPort(cli->getAppPort()) == cli) {
         pthread_mutex_lock(&clients_mutex);
         clients.erase(cli->getAppPort());
+        rx.closePort(cli->getAppPort());
         pthread_mutex_unlock(&clients_mutex);
         delete cli;
     }

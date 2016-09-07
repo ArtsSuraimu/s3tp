@@ -101,11 +101,11 @@ T PriorityQueue<T>::pop() {
 	PriorityQueue_node<T> * ref;
 	T element;
 
-	//Entering critical section
-	pthread_mutex_lock(&q_mutex);
-
 	//get the lowest seq packet and remove it from queue
 	assert(!isEmpty());
+
+    //Entering critical section
+    pthread_mutex_lock(&q_mutex);
 	ref = head;
 
 	if (ref->next == NULL) {

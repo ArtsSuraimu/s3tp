@@ -125,9 +125,9 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
     }
 
     pthread_mutex_lock(&rx_mutex);
-    if (isCompleteMessageForPortAvailable(pktCopy->hdr.port)) {
+    if (isCompleteMessageForPortAvailable(pktCopy->hdr.getPort())) {
         //New message is available, notify
-        available_messages[pktCopy->hdr.port] = 1;
+        available_messages[pktCopy->hdr.getPort()] = 1;
         pthread_cond_signal(&available_msg_cond);
     }
     pthread_mutex_unlock(&rx_mutex);
@@ -209,7 +209,10 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
             //TODO: throw some severe error
             return NULL;
         }
-        assembledData.insert(assembledData.end(), (char *)pkt->pdu, (char *)pkt->pdu + (pkt->hdr.pdu_length));
+        char * start = (char *)pkt->pdu;
+        char * end = start + (sizeof(char) * pkt->hdr.pdu_length);
+        assembledData.insert(assembledData.end(), start, end);
+        //assembledData.insert(assembledData.end(), start, start[pkt->hdr.pdu_length]);
         *len += pkt->hdr.pdu_length;
         current_port_sequence[it->first]++;
         if (!pkt->hdr.moreFragments()) {
@@ -225,7 +228,6 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
     } else {
         available_messages.erase(it->first);
     }
-
     return assembledData.data();
 }
 
