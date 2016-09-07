@@ -23,7 +23,8 @@
 
 #define MAX_REORDERING_WINDOW 256
 
-class RxModule: public Transceiver::LinkCallback {
+class RxModule: public Transceiver::LinkCallback,
+                        PriorityComparator<S3TP_PACKET_WRAPPER*> {
 public:
     RxModule();
     ~RxModule();
@@ -36,9 +37,10 @@ public:
     bool isNewMessageAvailable();
     void waitForNextAvailableMessage(pthread_mutex_t * callerMutex);
     char * getNextCompleteMessage(uint16_t * len, int * error, uint8_t * port);
+    virtual int comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER* element2);
 private:
     bool active;
-    Buffer inBuffer;
+    Buffer * inBuffer;
     uint8_t global_seq_num;
     uint32_t received_packets;
     pthread_mutex_t rx_mutex;

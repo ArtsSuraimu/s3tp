@@ -5,14 +5,15 @@
 #include "Buffer.h"
 
 //Ctor
-Buffer::Buffer() {
+Buffer::Buffer(PriorityComparator<S3TP_PACKET_WRAPPER*> * comparator) {
     pthread_mutex_init(&buffer_mutex, NULL);
+    this->comparator = comparator;
 }
 
 //Dtor
 Buffer::~Buffer() {
     pthread_mutex_lock(&buffer_mutex);
-    for (std::map<int, PriorityQueue *>::iterator it = queues.begin(); it != queues.end(); ++it) {
+    for (std::map<int, PriorityQueue<S3TP_PACKET_WRAPPER*> *>::iterator it = queues.begin(); it != queues.end(); ++it) {
         delete it->second;
     }
     queues.clear();
@@ -33,23 +34,23 @@ int Buffer::write(S3TP_PACKET_WRAPPER * packet) {
     pthread_mutex_lock(&buffer_mutex);
     int port = packet->pkt->hdr.port;
 
-    PriorityQueue * queue = queues[port];
+    PriorityQueue<S3TP_PACKET_WRAPPER*> * queue = queues[port];
     if (queue == NULL) {
         //Adding new queue to the internal map
-        queue = init_queue();
+        queue = new PriorityQueue<S3TP_PACKET_WRAPPER*>(comparator);
         queues[port] = queue;
     }
-    push(queue, packet);
-    packet_counter[port] = queue->size;
+    queue->push(packet);
+    packet_counter[port] = queue->getSize();
     printf("BUFFER port %d: packet %d written (%d bytes)\n", (port & 0x7F), packet->pkt->hdr.seq, packet->pkt->hdr.pdu_length);
     pthread_mutex_unlock(&buffer_mutex);
 
     return CODE_SUCCESS;
 }
 
-PriorityQueue * Buffer::getQueue(int port) {
+PriorityQueue<S3TP_PACKET_WRAPPER *> * Buffer::getQueue(int port) {
     pthread_mutex_lock(&buffer_mutex);
-    PriorityQueue * queue = queues[port];
+    PriorityQueue<S3TP_PACKET_WRAPPER*> * queue = queues[port];
     pthread_mutex_unlock(&buffer_mutex);
     return queue;
 }
@@ -74,15 +75,15 @@ S3TP_PACKET_WRAPPER * Buffer::getNextAvailablePacket() {
 }
 
 S3TP_PACKET_WRAPPER * Buffer::popPacketInternal(int port) {
-    PriorityQueue * queue = queues[port];
-    if (queue == NULL || isEmpty(queue)) {
+    PriorityQueue<S3TP_PACKET_WRAPPER*> * queue = queues[port];
+    if (queue == NULL || queue->isEmpty()) {
         return NULL;
     }
-    S3TP_PACKET_WRAPPER * packet = pop(queue);
-    if (isEmpty(queue)) {
+    S3TP_PACKET_WRAPPER * packet = queue->pop();
+    if (queue->isEmpty()) {
         packet_counter.erase(port);
     } else {
-        packet_counter[port] = queue->size;
+        packet_counter[port] = queue->getSize();
     }
     return packet;
 }

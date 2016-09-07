@@ -10,16 +10,17 @@
 
 class Buffer {
 public:
-    Buffer();
+    Buffer(PriorityComparator<S3TP_PACKET_WRAPPER*> * comparator);
     ~Buffer();
     bool packetsAvailable();
     int write(S3TP_PACKET_WRAPPER * packet);
-    PriorityQueue * getQueue(int port);
+    PriorityQueue<S3TP_PACKET_WRAPPER *> * getQueue(int port);
     S3TP_PACKET_WRAPPER * getNextPacket(int port);
     S3TP_PACKET_WRAPPER * getNextAvailablePacket();
 
 private:
-    std::map<int, PriorityQueue*> queues;
+    PriorityComparator<S3TP_PACKET_WRAPPER *> * comparator;
+    std::map<int, PriorityQueue<S3TP_PACKET_WRAPPER*>*> queues;
     std::map<int, int> packet_counter;
 
     pthread_mutex_t buffer_mutex;

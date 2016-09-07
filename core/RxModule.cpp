@@ -10,6 +10,7 @@ RxModule::RxModule() {
     received_packets = 0;
     pthread_mutex_init(&rx_mutex, NULL);
     pthread_cond_init(&available_msg_cond, NULL);
+    inBuffer = new Buffer(this);
 }
 
 RxModule::~RxModule() {
@@ -117,7 +118,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
     wrapper->channel = channel;
     wrapper->pkt = packet;
 
-    int result = inBuffer.write(wrapper);
+    int result = inBuffer->write(wrapper);
     if (result != CODE_SUCCESS) {
         //Something bad happened, couldn't put packet in buffer
         return result;
@@ -143,26 +144,29 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
 }
 
 bool RxModule::isCompleteMessageForPortAvailable(int port) {
-    PriorityQueue * q = inBuffer.getQueue(port);
-    PriorityQueue_node * node = q->head;
+    PriorityQueue<S3TP_PACKET_WRAPPER*> * q = inBuffer->getQueue(port);
+    q->lock();
+    PriorityQueue_node<S3TP_PACKET_WRAPPER*> * node = q->getHead();
     uint8_t fragment = 0;
     while (node != NULL) {
         S3TP_PACKET * pkt = node->element->pkt;
         if (pkt->hdr.seq_port != current_port_sequence[port]) {
             //Packet in queue is not the one with highest priority
-            return false;
+            break; //Will return false
         } else if (pkt->hdr.moreFragments() && (uint8_t)pkt->hdr.seq != fragment) {
             //Current fragment number is not the expected number,
             // i.e. at least one fragment is missing to complete the message
-            return false;
+            break; //Will return false
         } else if (!pkt->hdr.moreFragments() && (uint8_t)pkt->hdr.seq == fragment) {
             //Packet is last fragment, message is complete
+            q->unlock();
             return true;
         }
         fragment++;
         node = node->next;
     }
     //End of queue reached
+    q->unlock();
     return false;
 }
 
@@ -200,7 +204,7 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
     bool messageAssembled = false;
     std::vector<char> assembledData;
     while (!messageAssembled) {
-        S3TP_PACKET * pkt = inBuffer.getNextPacket(it->first)->pkt;
+        S3TP_PACKET * pkt = inBuffer->getNextPacket(it->first)->pkt;
         if (pkt->hdr.seq_port != current_port_sequence[it->first]) {
             //TODO: throw some severe error
             return NULL;
@@ -223,4 +227,32 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
     }
 
     return assembledData.data();
+}
+
+int RxModule::comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER* element2) {
+    bool comp = 0;
+    uint8_t seq1, seq2, offset;
+    pthread_mutex_lock(&rx_mutex);
+    offset = global_seq_num;
+    //First check global seq number for comparison
+    seq1 = ((uint8_t)(element1->pkt->hdr.seq >> 8)) - offset;
+    seq2 = ((uint8_t)(element2->pkt->hdr.seq >> 8)) - offset;
+    if (seq1 < seq2) {
+        comp = -1; //Element 1 is lower, hence has higher priority
+    } else if (seq1 > seq2) {
+        comp = 1; //Element 2 is lower, hence has higher priority
+    }
+    if (comp != 0) {
+        pthread_mutex_unlock(&rx_mutex);
+        return comp;
+    }
+    seq1 = (uint8_t)(element1->pkt->hdr.seq_port);
+    seq2 = (uint8_t)(element2->pkt->hdr.seq_port);
+    if (seq1 < seq2) {
+        comp = -1; //Element 1 is lower, hence has higher priority
+    } else if (seq1 > seq2) {
+        comp = 1; //Element 2 is lower, hence has higher priority
+    }
+    pthread_mutex_unlock(&rx_mutex);
+    return comp;
 }

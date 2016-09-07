@@ -9,6 +9,7 @@ TxModule::TxModule() {
     state = WAITING;
     pthread_mutex_init(&tx_mutex, NULL);
     pthread_cond_init(&tx_cond, NULL);
+    outBuffer = new Buffer(this);
     printf("Created Tx Module\n");
 }
 
@@ -29,13 +30,13 @@ void TxModule::txRoutine() {
             pthread_cond_wait(&tx_cond, &tx_mutex);
             continue;
         }
-        if(!outBuffer.packetsAvailable()) {
+        if(!outBuffer->packetsAvailable()) {
             state = WAITING;
             pthread_cond_wait(&tx_cond, &tx_mutex);
             continue;
         }
         state = RUNNING;
-        S3TP_PACKET_WRAPPER * wrapper = outBuffer.getNextAvailablePacket();
+        S3TP_PACKET_WRAPPER * wrapper = outBuffer->getNextAvailablePacket();
         if (wrapper == NULL) {
             continue;
         }
@@ -133,9 +134,37 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
     S3TP_PACKET_WRAPPER * wrapper = new S3TP_PACKET_WRAPPER();
     wrapper->pkt = packet;
     wrapper->channel = (uint8_t) spi_channel;
-    outBuffer.write(wrapper);
+    outBuffer->write(wrapper);
     pthread_cond_signal(&tx_cond);
 
     return CODE_SUCCESS;
+}
+
+int TxModule::comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER* element2) {
+    bool comp = 0;
+    uint8_t seq1, seq2, offset;
+    pthread_mutex_lock(&tx_mutex);
+    offset = global_seq_num;
+    //First check global seq number for comparison
+    seq1 = ((uint8_t)(element1->pkt->hdr.seq >> 8)) - offset;
+    seq2 = ((uint8_t)(element2->pkt->hdr.seq >> 8)) - offset;
+    if (seq1 < seq2) {
+        comp = -1; //Element 1 is lower, hence has higher priority
+    } else if (seq1 > seq2) {
+        comp = 1; //Element 2 is lower, hence has higher priority
+    }
+    if (comp != 0) {
+        pthread_mutex_unlock(&tx_mutex);
+        return comp;
+    }
+    seq1 = (uint8_t)(element1->pkt->hdr.seq_port);
+    seq2 = (uint8_t)(element2->pkt->hdr.seq_port);
+    if (seq1 < seq2) {
+        comp = -1; //Element 1 is lower, hence has higher priority
+    } else if (seq1 > seq2) {
+        comp = 1; //Element 2 is lower, hence has higher priority
+    }
+    pthread_mutex_unlock(&tx_mutex);
+    return comp;
 }
 

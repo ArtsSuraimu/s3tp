@@ -15,7 +15,7 @@
 #define TX_PARAM_CUSTOM 0x02
 #define CODE_INACTIVE_ERROR -1
 
-class TxModule {
+class TxModule : public PriorityComparator<S3TP_PACKET_WRAPPER *> {
 public:
     enum STATE {
         RUNNING,
@@ -41,10 +41,11 @@ private:
     Transceiver::LinkInterface * linkInterface;
 
     std::map<uint8_t, uint8_t> port_sequence;
-    Buffer outBuffer;
+    Buffer * outBuffer;
 
     void txRoutine();
     static void * staticTxRoutine(void * args);
+    virtual int comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER* element2);
 };
 
 #endif //S3TP_TXMODULE_H
