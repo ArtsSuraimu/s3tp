@@ -17,7 +17,7 @@ RxModule::~RxModule() {
     //TODO: implement. Also remember to close all ports
 }
 
-void RxModule::startModule(S3tpStatusInterface * statusInterface) {
+void RxModule::startModule(StatusInterface * statusInterface) {
     global_seq_num = 0;
     received_packets = 0;
     active = true;

@@ -2,18 +2,18 @@
 // Created by Lorenzo Donini on 25/08/16.
 //
 
-#include "s3tp_main.h"
+#include "S3TP.h"
 
-s3tp_main::s3tp_main() {
+S3TP::S3TP() {
 }
 
-s3tp_main::~s3tp_main() {
+S3TP::~S3TP() {
     pthread_mutex_lock(&s3tp_mutex);
     pthread_mutex_unlock(&s3tp_mutex);
     pthread_mutex_destroy(&s3tp_mutex);
 }
 
-int s3tp_main::init(TRANSCEIVER_CONFIG * config) {
+int S3TP::init(TRANSCEIVER_CONFIG * config) {
     pthread_mutex_init(&clients_mutex, NULL);
     pthread_mutex_init(&s3tp_mutex, NULL);
     pthread_mutex_lock(&s3tp_mutex);
@@ -35,7 +35,7 @@ int s3tp_main::init(TRANSCEIVER_CONFIG * config) {
     return CODE_SUCCESS;
 }
 
-int s3tp_main::stop() {
+int S3TP::stop() {
     //Deactivating module
     pthread_mutex_lock(&s3tp_mutex);
     active = false;
@@ -57,7 +57,7 @@ int s3tp_main::stop() {
     return CODE_SUCCESS;
 }
 
-Client * s3tp_main::getClientConnectedToPort(uint8_t port) {
+Client * S3TP::getClientConnectedToPort(uint8_t port) {
     pthread_mutex_lock(&clients_mutex);
     std::map<uint8_t, Client *>::iterator it = clients.find(port);
     if (it == clients.end()) {
@@ -69,7 +69,7 @@ Client * s3tp_main::getClientConnectedToPort(uint8_t port) {
     return cli;
 }
 
-int s3tp_main::sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
+int S3TP::sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
     /* As messages should still be sent out sequentially,
      * we're putting all of them into the fragmentation queue.
      * Fragmentation thread will then be in charge of checking
@@ -92,7 +92,7 @@ int s3tp_main::sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_
     return CODE_INTERNAL_ERROR;
 }
 
-int s3tp_main::sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
+int S3TP::sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
     S3TP_PACKET * packet;
     int status = 0;
 
@@ -108,7 +108,7 @@ int s3tp_main::sendSimplePayload(uint8_t channel, uint8_t port, void * data, siz
     return status;
 }
 
-int s3tp_main::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
+int S3TP::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
     S3TP_PACKET * packet;
 
     //Need to fragment
@@ -150,7 +150,7 @@ int s3tp_main::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_
 /*
  * Assembly Thread logic
  */
-void s3tp_main::assemblyRoutine() {
+void S3TP::assemblyRoutine() {
     uint16_t len;
     int error;
     char * data;
@@ -182,15 +182,15 @@ void s3tp_main::assemblyRoutine() {
     pthread_exit(NULL);
 }
 
-void * s3tp_main::staticAssemblyRoutine(void * args) {
-    static_cast<s3tp_main*>(args)->assemblyRoutine();
+void * S3TP::staticAssemblyRoutine(void * args) {
+    static_cast<S3TP*>(args)->assemblyRoutine();
     return NULL;
 }
 
 /*
  * Client Interface logic
  */
-void s3tp_main::onDisconnected(void * params) {
+void S3TP::onDisconnected(void * params) {
     Client * cli = (Client *)params;
     //Client disconnected from port. Mark that port as available again.
     if (this->getClientConnectedToPort(cli->getAppPort()) == cli) {
@@ -201,7 +201,7 @@ void s3tp_main::onDisconnected(void * params) {
     }
 }
 
-void s3tp_main::onConnected(void * params) {
+void S3TP::onConnected(void * params) {
     Client * cli = (Client * )params;
     pthread_mutex_lock(&clients_mutex);
     clients[cli->getAppPort()] = cli;
@@ -209,7 +209,7 @@ void s3tp_main::onConnected(void * params) {
     rx.openPort(cli->getAppPort());
 }
 
-int s3tp_main::onApplicationMessage(void * data, size_t len, void * params) {
+int S3TP::onApplicationMessage(void * data, size_t len, void * params) {
     Client * cli = (Client *)params;
     return sendToLinkLayer(cli->getVirtualChannel(), cli->getAppPort(), data, len, cli->getOptions());
 }
@@ -217,6 +217,6 @@ int s3tp_main::onApplicationMessage(void * data, size_t len, void * params) {
 /*
  * Status callbacks
  */
-void s3tp_main::onLinkStatusChanged(bool active) {
+void S3TP::onLinkStatusChanged(bool active) {
     tx.notifyLinkAvailability(active);
 }

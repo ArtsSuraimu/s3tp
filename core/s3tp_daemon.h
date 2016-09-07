@@ -17,13 +17,13 @@
 #include <pthread.h>
 #include <map>
 #include <csignal>
-#include "s3tp_main.h"
+#include "S3TP.h"
 
 class s3tp_daemon {
 private:
     sockaddr_un address;
     SOCKET server;
-    s3tp_main s3tp;
+    S3TP s3tp;
 
 public:
     int init(void * args);

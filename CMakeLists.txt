@@ -23,8 +23,8 @@ set(SOURCE_FILES
         core/RxModule.h
         core/Buffer.cpp
         core/Buffer.h
-        core/s3tp_main.cpp
-        core/s3tp_main.h
+        core/S3TP.cpp
+        core/S3TP.h
         core/SimpleQueue.h
         core/s3tp_daemon.cpp
         core/s3tp_daemon.h
@@ -33,7 +33,7 @@ set(SOURCE_FILES
         core/Client.cpp
         core/Client.h
         core/ClientInterface.h
-        core/S3tpStatusInterface.h
+        core/StatusInterface.h
         core/PriorityComparator.h
         test/s3tp_start.cpp)
 

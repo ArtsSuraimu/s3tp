@@ -9,7 +9,7 @@
 #include "RxModule.h"
 #include "SimpleQueue.h"
 #include "ClientInterface.h"
-#include "S3tpStatusInterface.h"
+#include "StatusInterface.h"
 #include "Client.h"
 #include <cstring>
 #include <moveio/PinMapper.h>
@@ -32,11 +32,11 @@ typedef struct transceiver_factory_config {
     Transceiver::SPIDescriptor descriptor;
 }TRANSCEIVER_CONFIG;
 
-class s3tp_main: public ClientInterface,
-                 public S3tpStatusInterface {
+class S3TP: public ClientInterface,
+                 public StatusInterface {
 public:
-    s3tp_main();
-    ~s3tp_main();
+    S3TP();
+    ~S3TP();
     int init(TRANSCEIVER_CONFIG * config);
     int stop();
     int sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts);

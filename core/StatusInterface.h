@@ -5,7 +5,7 @@
 #ifndef S3TP_LINKSTATUSINTERFACE_H
 #define S3TP_LINKSTATUSINTERFACE_H
 
-class S3tpStatusInterface {
+class StatusInterface {
 public:
     virtual void onLinkStatusChanged(bool active) = 0;
 };
