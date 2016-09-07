@@ -37,6 +37,10 @@ public:
 	bool isEmpty();
 	int push(T element);
 	uint32_t computeBufferSize();
+	uint16_t getSize();
+	void lock();
+	void unlock();
+	PriorityQueue_node<T> * getHead();
 
 private:
 	PriorityQueue_node<T> * head;
@@ -46,13 +50,13 @@ private:
 	PriorityComparator<T> * comparator;
 };
 
-PriorityQueue * init_queue ();
+/*PriorityQueue * init_queue ();
 int push (PriorityQueue *root, S3TP_PACKET_WRAPPER* packet);
 S3TP_PACKET_WRAPPER* pop (PriorityQueue* root);
 S3TP_PACKET_WRAPPER* peek (PriorityQueue* root);
 void deinit_queue (PriorityQueue* root);
 uint32_t computeBufferSize (PriorityQueue* root);
-bool isEmpty(PriorityQueue * root);
+bool isEmpty(PriorityQueue * root);*/
 
 
 template <typename T>
@@ -94,7 +98,7 @@ T PriorityQueue<T>::peek() {
 
 template <typename T>
 T PriorityQueue<T>::pop() {
-	PriorityQueue_node* ref;
+	PriorityQueue_node<T> * ref;
 	T element;
 
 	//Entering critical section
@@ -127,7 +131,7 @@ T PriorityQueue<T>::pop() {
 
 template <typename T>
 int PriorityQueue<T>::push(T element) {
-	PriorityQueue_node *ref, *newNode, *swap;
+	PriorityQueue_node<T> *ref, *newNode, *swap;
 
 	//Enter critical section
 	pthread_mutex_lock(&q_mutex);
@@ -141,7 +145,7 @@ int PriorityQueue<T>::push(T element) {
 	}
 
 	//Creating new node
-	newNode = (PriorityQueue_node*) calloc(1, sizeof(PriorityQueue_node));
+	newNode = (PriorityQueue_node<T>*) calloc(1, sizeof(PriorityQueue_node<T>));
 	newNode->element = element;
 
 	//Inserting new node inside the priority queue
@@ -190,6 +194,29 @@ uint32_t PriorityQueue<T>::computeBufferSize() {
 	uint32_t result = size * sizeof(S3TP_PACKET);
 	pthread_mutex_unlock(&q_mutex);
 	return result;
+}
+
+template <typename T>
+uint16_t PriorityQueue<T>::getSize() {
+	pthread_mutex_lock(&q_mutex);
+	uint16_t result = size;
+	pthread_mutex_unlock(&q_mutex);
+	return result;
+}
+
+template <typename T>
+void PriorityQueue<T>::lock() {
+	pthread_mutex_lock(&q_mutex);
+}
+
+template <typename T>
+void PriorityQueue<T>::unlock() {
+	pthread_mutex_unlock(&q_mutex);
+}
+
+template <typename T>
+PriorityQueue_node<T> * PriorityQueue<T>::getHead() {
+	return head;
 }
 
 /*	//TODO: implement properly, with correct seq check
