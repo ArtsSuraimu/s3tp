@@ -30,12 +30,12 @@ struct PriorityQueue_node {
 template <typename T>
 struct PriorityQueue {
 public:
-	PriorityQueue(PriorityComparator<T> * comparator);
+	PriorityQueue();
 	~PriorityQueue();
 	T pop();
 	T peek();
 	bool isEmpty();
-	int push(T element);
+	int push(T element, PriorityComparator<T> * comparator);
 	uint32_t computeBufferSize();
 	uint16_t getSize();
 	void lock();
@@ -47,7 +47,6 @@ private:
 	PriorityQueue_node<T> * tail;
 	pthread_mutex_t q_mutex;
 	uint16_t size;
-	PriorityComparator<T> * comparator;
 };
 
 /*PriorityQueue * init_queue ();
@@ -60,9 +59,8 @@ bool isEmpty(PriorityQueue * root);*/
 
 
 template <typename T>
-PriorityQueue<T>::PriorityQueue(PriorityComparator<T> * comparator) {
+PriorityQueue<T>::PriorityQueue() {
 	size = 0;
-	this->comparator = comparator;
 	pthread_mutex_init(&q_mutex, NULL);
 }
 
@@ -130,7 +128,7 @@ T PriorityQueue<T>::pop() {
 }
 
 template <typename T>
-int PriorityQueue<T>::push(T element) {
+int PriorityQueue<T>::push(T element, PriorityComparator<T> * comparator) {
 	PriorityQueue_node<T> *ref, *newNode, *swap;
 
 	//Enter critical section
@@ -156,8 +154,8 @@ int PriorityQueue<T>::push(T element) {
 			head = newNode;
 			tail = newNode;
 			break;
-		} else if (comparator->comparePriority(ref->element, element) > 0) {
-			//New node has lower priority than current element -> append the new element here
+		} else if (comparator->comparePriority(ref->element, element) < 0) {
+            //First element (old) has higher priority than new element -> append the new element here
 			swap = ref->next;
 			ref->next = newNode;
 			newNode->prev = ref;
@@ -175,7 +173,7 @@ int PriorityQueue<T>::push(T element) {
 			head = newNode;
 			break;
 		}
-		//New node has higher priority. Try to get better
+		//New node has higher priority. Keep looking for right position in q
 		ref = ref->prev;
 	}
 
