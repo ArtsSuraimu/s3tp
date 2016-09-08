@@ -23,7 +23,8 @@ int main(int argc, char ** argv) {
     } else if (strcmp(transceiverType, "fire") == 0) {
         config.type = FIRE;
         Transceiver::FireTcpPair pair;
-        pair.port = 2000;
+        printf ("Enter fire port: ");
+        scanf("%d", &pair.port);
         pair.channel = 3;
         config.mappings.push_back(pair);
     } else {

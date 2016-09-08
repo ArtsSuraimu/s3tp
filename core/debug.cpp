@@ -34,8 +34,97 @@ int hexdump(const unsigned char *buffer, ssize_t len)
 	return n;
 }
 
+class MyTest : public PriorityComparator<S3TP_PACKET_WRAPPER*> {
+public:
+	uint8_t global_seq_num;
+	uint8_t to_consume;
+	int comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER* element2) {
+		int8_t comp = 0;
+		uint8_t seq1, seq2, offset;
+		offset = to_consume;
+		//First check global seq number for comparison
+		seq1 = ((uint8_t)(element1->pkt->hdr.seq >> 8)) - offset;
+		seq2 = ((uint8_t)(element2->pkt->hdr.seq >> 8)) - offset;
+		if (seq1 < seq2) {
+			comp = -1; //Element 1 is lower, hence has higher priority
+		} else if (seq1 > seq2) {
+			comp = 1; //Element 2 is lower, hence has higher priority
+		}
+		if (comp != 0) {
+			return comp;
+		}
+		seq1 = (uint8_t)(element1->pkt->hdr.seq_port);
+		seq2 = (uint8_t)(element2->pkt->hdr.seq_port);
+		if (seq1 < seq2) {
+			comp = -1; //Element 1 is lower, hence has higher priority
+		} else if (seq1 > seq2) {
+			comp = 1; //Element 2 is lower, hence has higher priority
+		}
+		return comp;
+	}
+};
+
+void queueIntegrityTest() {
+	MyTest test;
+	PriorityQueue<S3TP_PACKET_WRAPPER*> * q = new PriorityQueue<S3TP_PACKET_WRAPPER*>();
+	S3TP_PACKET * pack;
+	S3TP_PACKET_WRAPPER * wrapper;
+	test.global_seq_num = 0;
+	test.to_consume = 0;
+	char data1 [] = {'h','e','l','l','o'};
+	size_t s = sizeof(data1);
+
+	pack = new S3TP_PACKET();
+	memcpy(pack->pdu, data1, s);
+	pack->hdr.pdu_length = (uint16_t )s;
+	pack->hdr.setPort(20);
+	pack->hdr.seq = (uint16_t)(test.global_seq_num << 8);
+	pack->hdr.seq_port = 0;
+	wrapper = new S3TP_PACKET_WRAPPER();
+	wrapper->channel = 0;
+	wrapper->pkt = pack;
+	q->push(wrapper, &test);
+	test.global_seq_num++;
+
+	s = 15;
+	char * data2 = new char[s];
+	for (int i=0; i<s; i++) {
+		data2[i] = 'x';
+	}
+	pack = new S3TP_PACKET();
+	memcpy(pack->pdu, data2, s);
+	pack->hdr.pdu_length = (uint16_t)s;
+	pack->hdr.setPort(20);
+	pack->hdr.seq = (uint16_t )((test.global_seq_num << 8) | 1);
+	pack->hdr.seq_port = 2;
+	wrapper = new S3TP_PACKET_WRAPPER();
+	wrapper->channel = 0;
+	wrapper->pkt = pack;
+	q->push(wrapper, &test);
+
+	s = 992;
+	data2 = new char[s];
+	for (int i=0; i<s; i++) {
+		data2[i] = 'w';
+	}
+	pack = new S3TP_PACKET();
+	memcpy(pack->pdu, data2, s);
+	pack->hdr.pdu_length = (uint16_t)s;
+	pack->hdr.setPort(20);
+	pack->hdr.seq = (uint16_t)((test.global_seq_num << 8) | 0);
+	pack->hdr.seq_port = 1;
+	wrapper = new S3TP_PACKET_WRAPPER();
+	wrapper->channel = 0;
+	wrapper->pkt = pack;
+	q->push(wrapper, &test);
+	test.global_seq_num++;
+
+	printf("Q size: %d\n", q->getSize());
+}
+
 void queueTest() {
-	PriorityQueue * root = init_queue();
+	MyTest test;
+	PriorityQueue<S3TP_PACKET_WRAPPER*> * q = new PriorityQueue<S3TP_PACKET_WRAPPER*>();
 	S3TP_PACKET * pack;
 	S3TP_PACKET_WRAPPER * wrapper;
 	for (uint16_t i=1050; i>750; i--) {
@@ -45,7 +134,7 @@ void queueTest() {
 		wrapper = new S3TP_PACKET_WRAPPER();
 		wrapper->channel = 0;
 		wrapper->pkt = pack;
-		push(root, wrapper);
+		q->push(wrapper, &test);
 	}
 	//Packet to be put at end of q
 	pack = (S3TP_PACKET *) calloc(1, sizeof(S3TP_PACKET));
@@ -54,7 +143,7 @@ void queueTest() {
 	wrapper = new S3TP_PACKET_WRAPPER();
 	wrapper->channel = 0;
 	wrapper->pkt = pack;
-	push(root, wrapper);
+	q->push(wrapper, &test);
 
 	//Packet one place before end of q
 	pack = (S3TP_PACKET *) calloc(1, sizeof(S3TP_PACKET));
@@ -63,7 +152,7 @@ void queueTest() {
 	wrapper = new S3TP_PACKET_WRAPPER();
 	wrapper->channel = 0;
 	wrapper->pkt = pack;
-	push(root, wrapper);
+	q->push(wrapper, &test);
 
 	//Packet one place after end of q
 	pack = (S3TP_PACKET *) calloc(1, sizeof(S3TP_PACKET));
@@ -72,7 +161,7 @@ void queueTest() {
 	wrapper = new S3TP_PACKET_WRAPPER();
 	wrapper->channel = 0;
 	wrapper->pkt = pack;
-	push(root, wrapper);
+	q->push(wrapper, &test);
 
 	for (uint16_t i=1; i<=500; i++) {
 		pack = (S3TP_PACKET *) calloc(1, sizeof(S3TP_PACKET));
@@ -81,7 +170,7 @@ void queueTest() {
 		wrapper = new S3TP_PACKET_WRAPPER();
 		wrapper->channel = 0;
 		wrapper->pkt = pack;
-		push(root, wrapper);
+		q->push(wrapper, &test);
 	}
 	for (uint16_t i=750; i>500; i--) {
 		pack = (S3TP_PACKET *) calloc(1, sizeof(S3TP_PACKET));
@@ -90,20 +179,21 @@ void queueTest() {
 		wrapper = new S3TP_PACKET_WRAPPER();
 		wrapper->channel = 0;
 		wrapper->pkt = pack;
-		push(root, wrapper);
+		q->push(wrapper, &test);
 	}
-	printf("Currently %d elements in queue. Buffer size: %d\n", root->size, computeBufferSize(root));
+	uint32_t bs = q->computeBufferSize();
+	printf("Currently %d elements in queue. Buffer size: %d\n", q->getSize(), (int)bs);
 
 	//Now emptying q
-	while (peek(root) != NULL) {
-		wrapper = pop(root);
+	while (q->peek() != NULL) {
+		wrapper = q->pop();
 		pack = wrapper->pkt;
 		printf("Popped element with seq num %d\n", pack->hdr.seq);
 		free(pack);
 		free(wrapper);
 	}
 	printf("Queue is empty now!\n");
-	deinit_queue(root);
+	delete q;
 }
 
 /**
@@ -153,7 +243,7 @@ void txModuleTest() {
 }
 
 void * applicationRoutine(void * args) {
-	s3tp_main * main = (s3tp_main *)args;
+	S3TP * main = (S3TP *)args;
 	uint8_t appPort = (uint8_t) (rand() % DEFAULT_MAX_OUT_PORTS);
 	int len, i, result;
 	char * message;
@@ -184,7 +274,7 @@ void * applicationRoutine(void * args) {
 }
 
 void s3tpMainModuleTest() {
-	s3tp_main main;
+	S3TP main;
 	//main.init();
 	pthread_t appThread1;
 	pthread_t appThread2;
@@ -243,10 +333,11 @@ void daemonTest() {
 
 int main(int argc, char**argv) {
 	srand(time(NULL));
+	queueIntegrityTest();
 	//queueTest();
 	//txModuleTest();
 	//simpleQueueTest();
 	//s3tpMainModuleTest();
 	//crcTest();
-	daemonTest();
+	//daemonTest();
 }
