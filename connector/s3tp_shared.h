@@ -35,7 +35,9 @@
 
 #define SAFE_TRANSMISSION_COUNT 3
 
-#ifdef MOVE_TRANSCEIVER_BACKEND_SPI_DEBUG
+#define MOVE_S3TP_DEBUG 1
+
+#ifdef MOVE_S3TP_DEBUG
 #define LOG_DBG_S3TP(...) printf(__VA_ARGS__)
 #else
 #define LOG_DBG_S3TP(...)

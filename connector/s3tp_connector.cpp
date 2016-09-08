@@ -248,7 +248,7 @@ void s3tp_connector::asyncListener() {
             break;
         }
         //Length of next message received
-        char * message = new char[len];
+        char * message = new char[len+1];
         char * currentPosition = message;
 
         //Read payload
@@ -274,7 +274,8 @@ void s3tp_connector::asyncListener() {
         } while(rd < len);
 
         //Payload received entirely
-        printf("Client %d on port %d: received data <%s>\n", socketDescriptor, config.port, message);
+        message[len] = '\0';
+        printf("Client %d on port %d: received data (%ld bytes) <%s>\n", socketDescriptor, config.port, len, message);
         callback(message, len);
 
         pthread_mutex_lock(&connector_mutex);
