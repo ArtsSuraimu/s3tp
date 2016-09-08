@@ -41,7 +41,7 @@ public:
 private:
     bool active;
     Buffer * inBuffer;
-    uint8_t global_seq_num;
+    uint8_t to_consume_global_seq;
     uint32_t received_packets;
     pthread_mutex_t rx_mutex;
     pthread_cond_t available_msg_cond;

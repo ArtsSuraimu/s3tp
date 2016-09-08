@@ -38,8 +38,10 @@ private:
     pthread_mutex_t tx_mutex;
     pthread_cond_t tx_cond;
     uint8_t global_seq_num;
+    uint8_t to_consume_global_seq;
     Transceiver::LinkInterface * linkInterface;
 
+    std::map<uint8_t, uint8_t> to_consume_port_seq;
     std::map<uint8_t, uint8_t> port_sequence;
     Buffer * outBuffer;
 

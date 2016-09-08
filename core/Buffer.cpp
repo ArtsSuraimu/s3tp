@@ -37,10 +37,10 @@ int Buffer::write(S3TP_PACKET_WRAPPER * packet) {
     PriorityQueue<S3TP_PACKET_WRAPPER*> * queue = queues[port];
     if (queue == NULL) {
         //Adding new queue to the internal map
-        queue = new PriorityQueue<S3TP_PACKET_WRAPPER*>(comparator);
+        queue = new PriorityQueue<S3TP_PACKET_WRAPPER*>();
         queues[port] = queue;
     }
-    queue->push(packet);
+    queue->push(packet, comparator);
     packet_counter[port] = queue->getSize();
     printf("BUFFER port %d: packet %d written (%d bytes)\n", port, packet->pkt->hdr.seq, packet->pkt->hdr.pdu_length);
     pthread_mutex_unlock(&buffer_mutex);

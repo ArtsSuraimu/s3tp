@@ -8,6 +8,7 @@
 TxModule::TxModule() {
     state = WAITING;
     global_seq_num = 0;
+    to_consume_global_seq = 0;
     pthread_mutex_init(&tx_mutex, NULL);
     pthread_cond_init(&tx_cond, NULL);
     outBuffer = new Buffer(this);
@@ -43,6 +44,8 @@ void TxModule::txRoutine() {
         }
         pthread_mutex_unlock(&tx_mutex);
         S3TP_PACKET * pkt = wrapper->pkt;
+        to_consume_global_seq = (uint8_t)((pkt->hdr.seq >> 8) + 1);
+        to_consume_port_seq[pkt->hdr.getPort()]++;
         printf("TX: Packet sent from port %d to SPI -> glob_seq %d; sub_seq %d; port_seq %d\n",
                pkt->hdr.getPort(),
                (pkt->hdr.seq >> 8),
@@ -143,13 +146,13 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
 }
 
 int TxModule::comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER* element2) {
-    bool comp = 0;
+    int comp = 0;
     uint8_t seq1, seq2, offset;
     pthread_mutex_lock(&tx_mutex);
-    offset = global_seq_num;
+    offset = to_consume_global_seq;
     //First check global seq number for comparison
-    seq1 = ((uint8_t)(element1->pkt->hdr.seq >> 8)) - offset;
-    seq2 = ((uint8_t)(element2->pkt->hdr.seq >> 8)) - offset;
+    seq1 = (uint8_t)(element1->pkt->hdr.seq >> 8) - offset;
+    seq2 = (uint8_t)(element2->pkt->hdr.seq >> 8) - offset;
     if (seq1 < seq2) {
         comp = -1; //Element 1 is lower, hence has higher priority
     } else if (seq1 > seq2) {
@@ -159,8 +162,9 @@ int TxModule::comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER
         pthread_mutex_unlock(&tx_mutex);
         return comp;
     }
-    seq1 = (uint8_t)(element1->pkt->hdr.seq_port);
-    seq2 = (uint8_t)(element2->pkt->hdr.seq_port);
+    offset = to_consume_port_seq[element1->pkt->hdr.getPort()];
+    seq1 = element1->pkt->hdr.seq_port - offset;
+    seq2 = element2->pkt->hdr.seq_port - offset;
     if (seq1 < seq2) {
         comp = -1; //Element 1 is lower, hence has higher priority
     } else if (seq1 > seq2) {
