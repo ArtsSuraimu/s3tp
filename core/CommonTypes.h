@@ -22,6 +22,10 @@ typedef struct tag_s3tp_header
 				 * 2nd Byte: Seq_sub 
 				 used for packet fragmentation 
 				*/
+	/*
+	 * Contains the length of the payload of this current packet.
+	 * The last 2 bits are reserved for the protocol.
+	 */
 	uint16_t pdu_length;
 	uint8_t seq_port;		/* used for reordering */
     uint8_t port;
@@ -39,6 +43,7 @@ typedef struct tag_s3tp_header
 		port &= ~(1 << 7);
 	}
 
+	//Getters and setters
 	uint8_t getPort() {
 		return port & (uint8_t)0x7F;
 	}
@@ -47,13 +52,36 @@ typedef struct tag_s3tp_header
 		uint8_t fragFlag = moreFragments();
 		this->port = (fragFlag << 7) | port;
 	}
+
+	uint8_t getGlobalSequence() {
+		return (uint8_t) (seq >> 8);
+	}
+
+	void setGlobalSequence(uint8_t global_seq) {
+		seq = (uint16_t )((seq & 0xFF) | (global_seq << 8));
+	}
+
+	uint8_t getSubSequence() {
+		return (uint8_t) (seq & 0xFF);
+	}
+
+	void setSubSequence(uint8_t sub_seq) {
+		seq = (uint16_t)((seq & 0xFF00) | sub_seq);
+	}
+
+	uint8_t getMessageType() {
+		return (uint8_t)(pdu_length >> 14);
+	}
+
+	void setMessageType(uint8_t type) {
+		pdu_length |= (type << 14);
+	}
 }S3TP_HEADER;
 
-typedef struct tag_s3tp_PACKET
-{
+typedef struct tag_s3tp_PACKET {
 	S3TP_HEADER hdr;
 	char pdu[LEN_S3TP_PDU];
-}S3TP_PACKET, * pS3TP_PACKET;
+}S3TP_PACKET;
 #pragma pack(pop)
 
 typedef struct tag_queue_data
