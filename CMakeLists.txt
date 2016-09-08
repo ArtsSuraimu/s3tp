@@ -48,7 +48,7 @@ set(CONNECTOR_SRC_FILES
         connector/s3tp_connector.h
         connector/s3tp_shared.h
         connector/s3tp_shared.cpp
-        connector/connector_main.cpp)
+        test/connector_main.cpp)
 
 add_executable(s3tp_conn ${CONNECTOR_SRC_FILES})
 
