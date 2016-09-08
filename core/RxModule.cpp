@@ -14,6 +14,13 @@ RxModule::RxModule() {
 }
 
 RxModule::~RxModule() {
+    stopModule();
+    pthread_mutex_lock(&rx_mutex);
+    delete inBuffer;
+    pthread_cond_destroy(&available_msg_cond);
+
+    pthread_mutex_unlock(&rx_mutex);
+    pthread_mutex_destroy(&rx_mutex);
     //TODO: implement. Also remember to close all ports
 }
 
@@ -62,15 +69,15 @@ int RxModule::openPort(uint8_t port) {
         pthread_mutex_unlock(&rx_mutex);
         return MODULE_INACTIVE;
     }
-    if (current_port_sequence.find(port) != current_port_sequence.end()) {
+    if (open_ports.find(port) != open_ports.end()) {
         //Port is already open
         pthread_mutex_unlock(&rx_mutex);
         return PORT_ALREADY_OPEN;
     }
-    current_port_sequence[port] = 0;
+    open_ports[port] = 0;
     pthread_mutex_unlock(&rx_mutex);
 
-    return PORT_OPENED;
+    return CODE_SUCCESS;
 }
 
 int RxModule::closePort(uint8_t port) {
@@ -79,10 +86,9 @@ int RxModule::closePort(uint8_t port) {
         pthread_mutex_unlock(&rx_mutex);
         return MODULE_INACTIVE;
     }
-    if (current_port_sequence.find(port) != current_port_sequence.end()) {
-        current_port_sequence.erase(port);
-        pthread_mutex_unlock(&rx_mutex);
-        return PORT_CLOSED;
+    if (open_ports.find(port) != open_ports.end()) {
+        open_ports.erase(port);
+        return CODE_SUCCESS;
     }
 
     pthread_mutex_unlock(&rx_mutex);
@@ -91,7 +97,7 @@ int RxModule::closePort(uint8_t port) {
 
 bool RxModule::isPortOpen(uint8_t port) {
     pthread_mutex_lock(&rx_mutex);
-    bool result = (current_port_sequence.find(port) != current_port_sequence.end()) && active;
+    bool result = (open_ports.find(port) != open_ports.end() && active);
     pthread_mutex_unlock(&rx_mutex);
     return result;
 }
@@ -106,6 +112,11 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
     if (check != packet->hdr.crc) {
         printf("Wrong CRC\n");
         return CODE_ERROR_CRC_INVALID;
+    }
+
+    if (!isPortOpen(packet->hdr.getPort())) {
+        //Dropping packet right away
+        return CODE_ERROR_PORT_CLOSED;
     }
 
     //Copying packet
@@ -216,7 +227,6 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
         }
         char * end = pkt->pdu + (sizeof(char) * pkt->hdr.pdu_length);
         assembledData.insert(assembledData.end(), pkt->pdu, end);
-        //assembledData.insert(assembledData.end(), start, start[pkt->hdr.pdu_length]);
         *len += pkt->hdr.pdu_length;
         current_port_sequence[it->first]++;
         if (!pkt->hdr.moreFragments()) {

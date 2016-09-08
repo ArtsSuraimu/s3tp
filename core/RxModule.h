@@ -14,12 +14,11 @@
 #include <trctrl/LinkCallback.h>
 
 #define PORT_ALREADY_OPEN -1
-#define PORT_OPENED 0
 #define PORT_ALREADY_CLOSED -1
-#define PORT_CLOSED 0
 #define MODULE_INACTIVE -2
 #define CODE_ERROR_CRC_INVALID -3
 #define NO_MESSAGES_AVAILABLE -4
+#define CODE_ERROR_PORT_CLOSED -5
 
 #define MAX_REORDERING_WINDOW 256
 
@@ -47,7 +46,7 @@ private:
     pthread_cond_t available_msg_cond;
 
     StatusInterface * statusInterface;
-
+    std::map<uint8_t, uint8_t> open_ports;
     std::map<uint8_t, uint8_t> current_port_sequence;
     std::map<uint8_t, uint8_t> available_messages;
 

@@ -67,6 +67,7 @@ private:
 
     //Status check
     virtual void onLinkStatusChanged(bool active);
+    virtual void onError(int error, void * params);
 };
 
 

@@ -60,7 +60,7 @@ void Client::handleConnectionClosed() {
     pthread_mutex_unlock(&client_mutex);
     //Notifying s3tp that a port is available again
     if (client_if != NULL) {
-        client_if->onDisconnected(&app_port);
+        client_if->onDisconnected(this);
     }
 }
 
@@ -70,9 +70,8 @@ void Client::kill() {
         pthread_join(client_thread, NULL);
         return;
     }
-    closeConnection();
     //Kill thread and wait for it to finish
-    pthread_cancel(client_thread);
+    closeConnection();
     pthread_join(client_thread, NULL);
 }
 

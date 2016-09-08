@@ -9,6 +9,22 @@ S3TP::S3TP() {
 
 S3TP::~S3TP() {
     pthread_mutex_lock(&s3tp_mutex);
+    bool toStop = active;
+    pthread_mutex_unlock(&s3tp_mutex);
+    if (toStop) {
+        stop();
+    }
+
+    pthread_cond_destroy(&assembly_cond);
+    std::map<uint8_t, Client*>::iterator it;
+    pthread_mutex_lock(&clients_mutex);
+    while ((it = clients.begin()) != clients.end()) {
+        pthread_mutex_unlock(&clients_mutex);
+        it->second->kill();
+        pthread_mutex_lock(&clients_mutex);
+    }
+    pthread_mutex_unlock(&clients_mutex);
+    pthread_mutex_destroy(&clients_mutex);
     pthread_mutex_unlock(&s3tp_mutex);
     pthread_mutex_destroy(&s3tp_mutex);
 }
@@ -221,4 +237,8 @@ int S3TP::onApplicationMessage(void * data, size_t len, void * params) {
  */
 void S3TP::onLinkStatusChanged(bool active) {
     tx.notifyLinkAvailability(active);
+}
+
+void S3TP::onError(int error, void * params) {
+    //TODO: implement
 }
