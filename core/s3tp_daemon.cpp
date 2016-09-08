@@ -12,6 +12,7 @@ int s3tp_daemon::init(void * args) {
     }
     unlink(socket_path);
     address.sun_family = AF_UNIX;
+    printf("Socket path %s\n", socket_path);
     strcpy(address.sun_path, socket_path);
 
     int reuse = 1;

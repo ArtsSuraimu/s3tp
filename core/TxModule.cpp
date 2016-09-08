@@ -129,8 +129,7 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
     packet->hdr.seq_port = port_sequence[port]++;
     pthread_mutex_unlock(&tx_mutex);
 
-    char * dataPtr = (char *)packet->pdu;
-    uint16_t crc = calc_checksum(dataPtr, packet->hdr.pdu_length);
+    uint16_t crc = calc_checksum(packet->pdu, packet->hdr.pdu_length);
     packet->hdr.crc = crc;
 
     S3TP_PACKET_WRAPPER * wrapper = new S3TP_PACKET_WRAPPER();

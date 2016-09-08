@@ -103,7 +103,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
     }
 
     //Checking CRC
-    uint16_t check = calc_checksum((char *)packet->pdu, packet->hdr.pdu_length);
+    uint16_t check = calc_checksum(packet->pdu, packet->hdr.pdu_length);
     if (check != packet->hdr.crc) {
         printf("Wrong CRC\n");
         return CODE_ERROR_CRC_INVALID;
@@ -209,9 +209,8 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
             //TODO: throw some severe error
             return NULL;
         }
-        char * start = (char *)pkt->pdu;
-        char * end = start + (sizeof(char) * pkt->hdr.pdu_length);
-        assembledData.insert(assembledData.end(), start, end);
+        char * end = pkt->pdu + (sizeof(char) * pkt->hdr.pdu_length);
+        assembledData.insert(assembledData.end(), pkt->pdu, end);
         //assembledData.insert(assembledData.end(), start, start[pkt->hdr.pdu_length]);
         *len += pkt->hdr.pdu_length;
         current_port_sequence[it->first]++;
