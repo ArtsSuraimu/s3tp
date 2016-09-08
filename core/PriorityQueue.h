@@ -10,7 +10,7 @@
 #ifndef CORE_QUEUE_H_
 #define CORE_QUEUE_H_
 
-#include "s3tp_types.h"
+#include "CommonTypes.h"
 #include "PriorityComparator.h"
 #include <pthread.h>
 #include <assert.h>

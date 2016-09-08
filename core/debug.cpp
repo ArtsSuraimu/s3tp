@@ -11,7 +11,7 @@
 #include "debug.h"
 #include <unistd.h>
 #include <string>
-#include "s3tp_daemon.h"
+#include "TransportDaemon.h"
 
 const int default_opts = S3TP_OPTION_ARQ;
 

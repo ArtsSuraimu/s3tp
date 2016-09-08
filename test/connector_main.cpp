@@ -1,8 +1,4 @@
 //
-// Created by lorenzodonini on 05.09.16.
-//
-
-//
 // Created by Lorenzo Donini on 01/09/16.
 //
 

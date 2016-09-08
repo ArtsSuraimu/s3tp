@@ -16,7 +16,7 @@ set(SOURCE_FILES
         core/constants.h
         core/PriorityQueue.cpp
         core/PriorityQueue.h
-        core/s3tp_types.h
+        core/CommonTypes.h
         core/TxModule.cpp
         core/TxModule.h
         core/RxModule.cpp
@@ -26,8 +26,8 @@ set(SOURCE_FILES
         core/S3TP.cpp
         core/S3TP.h
         core/SimpleQueue.h
-        core/s3tp_daemon.cpp
-        core/s3tp_daemon.h
+        core/TransportDaemon.cpp
+        core/TransportDaemon.h
         core/utilities.h
         core/utilities.cpp
         core/Client.cpp

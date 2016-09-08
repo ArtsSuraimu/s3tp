@@ -8,7 +8,7 @@
 #ifndef CORE_UTILITIES_H_
 #define CORE_UTILITIES_H_
 
-#include "s3tp_types.h"
+#include "CommonTypes.h"
 
 uint16_t calc_checksum(const char *data, uint16_t size);
 bool verify_checksum(const char *data, uint16_t len, uint16_t checksum);

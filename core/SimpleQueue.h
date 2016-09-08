@@ -5,7 +5,7 @@
 #ifndef S3TP_SIMPLEQUEUE_H
 #define S3TP_SIMPLEQUEUE_H
 
-#include "s3tp_types.h"
+#include "CommonTypes.h"
 #include <pthread.h>
 #include <assert.h>
 

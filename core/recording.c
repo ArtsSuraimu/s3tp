@@ -7,7 +7,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "s3tp_types.h"
+#include "CommonTypes.h"
 #include "utilities.h"
 
 typedef struct tag_rec_data rec_data;
