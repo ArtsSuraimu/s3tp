@@ -4,7 +4,9 @@
 
 #include "s3tp_shared.h"
 
-const char * socket_path = "/tmp/s3tp";
+const int LOG_LEVEL = LOG_LEVEL_DEBUG;
+
+const char * socket_path = "/tmp/serv_s3tp";
 
 int read_length_safe(int fd, size_t * out_length) {
     ssize_t rd = 0;
