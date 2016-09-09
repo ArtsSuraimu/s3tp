@@ -179,15 +179,19 @@ void S3TP::assemblyRoutine() {
         pthread_mutex_unlock(&s3tp_mutex);
         data = rx.getNextCompleteMessage(&len, &error, &port);
         if (error != CODE_SUCCESS) {
-            LOG_DBG_S3TP("Error while trying to consume message\n");
+            LOG_WARN("Error while trying to consume message");
         }
-        LOG_DBG_S3TP("Correctly consumed data from queue %d: %s\n", port, data);
+        std::ostringstream os;
+        os << "Correctly consumed data from queue " << (int)port << " (" << len << " bytes)";
+        LOG_DEBUG(os.str());
         pthread_mutex_lock(&clients_mutex);
         cli = clients[port];
         if (cli != NULL) {
             cli->send(data, len);
+            delete data;
         } else {
-            printf("Port %d is not open. Couldn't forward data to application\n", port);
+            os.clear();
+            os << "Port " << (int)port << " is not open. Couldn't forward data to application";
         }
         pthread_mutex_unlock(&clients_mutex);
 

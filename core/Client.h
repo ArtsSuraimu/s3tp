@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
-#include "../connector/s3tp_shared.h"
+#include "s3tp_shared.h"
 #include "ClientInterface.h"
 
 class Client {

@@ -110,7 +110,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
     //Checking CRC
     uint16_t check = calc_checksum(packet->pdu, packet->hdr.getPduLength());
     if (check != packet->hdr.crc) {
-        printf("Wrong CRC\n");
+        LOG_WARN("Wrong CRC");
         return CODE_ERROR_CRC_INVALID;
     }
 
@@ -137,8 +137,14 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
         //Something bad happened, couldn't put packet in buffer
         return result;
     }
-    printf("RX: Packet received from SPI to port %d -> glob_seq %d, sub_seq %d, port_seq %d\n",
-           pktCopy->hdr.getPort(), (pktCopy->hdr.getGlobalSequence()), (pktCopy->hdr.getSubSequence()), pktCopy->hdr.seq_port);
+
+    std::ostringstream stream;
+    stream << "RX: Packet received from SPI to port " << (int)pktCopy->hdr.getPort();
+    stream << " -> glob_seq " << (int)pktCopy->hdr.getGlobalSequence();
+    stream << ", sub_seq " << (int)pktCopy->hdr.getSubSequence();
+    stream << ", port_seq " << (int)pktCopy->hdr.seq_port;
+    LOG_DEBUG(stream.str());
+
 
     pthread_mutex_lock(&rx_mutex);
     if (isCompleteMessageForPortAvailable(pktCopy->hdr.getPort())) {
@@ -207,11 +213,13 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
     *error = CODE_SUCCESS;
     if (!isActive()) {
         *error = MODULE_INACTIVE;
+        LOG_WARN("RX: Module currently inactive, cannot consume messages");
         *len = 0;
         return NULL;
     }
     if (!isNewMessageAvailable()) {
-        *error = NO_MESSAGES_AVAILABLE;
+        *error = CODE_NO_MESSAGES_AVAILABLE;
+        LOG_WARN("RX: Trying to consume message, although no new messages are available");
         *len = 0;
         return NULL;
     }
@@ -222,7 +230,8 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
     while (!messageAssembled) {
         S3TP_PACKET * pkt = inBuffer->getNextPacket(it->first)->pkt;
         if (pkt->hdr.seq_port != current_port_sequence[it->first]) {
-            //TODO: throw some severe error
+            *error = CODE_ERROR_INCONSISTENT_STATE;
+            LOG_ERROR("RX: inconsistency between packet sequence port and expected sequence port");
             return NULL;
         }
         char * end = pkt->pdu + (sizeof(char) * pkt->hdr.getPduLength());
@@ -242,7 +251,10 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
     } else {
         available_messages.erase(it->first);
     }
-    return assembledData.data();
+    //Copying the entire data array, as vector memory will be released at end of function
+    char * data = new char[assembledData.size()];
+    memcpy(data, assembledData.data(), assembledData.size());
+    return data;
 }
 
 int RxModule::comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER* element2) {

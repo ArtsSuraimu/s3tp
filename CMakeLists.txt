@@ -11,8 +11,8 @@ include_directories(${TRCTRL_INCLUDE_DIRS})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 set(SOURCE_FILES
-        connector/s3tp_shared.h
-        connector/s3tp_shared.cpp
+        core/s3tp_shared.h
+        core/s3tp_shared.cpp
         core/constants.h
         core/PriorityQueue.cpp
         core/PriorityQueue.h
@@ -35,7 +35,8 @@ set(SOURCE_FILES
         core/ClientInterface.h
         core/StatusInterface.h
         core/PriorityComparator.h
-        test/s3tp_start.cpp)
+        test/s3tp_start.cpp
+        core/Logger.h)
 
 add_executable(s3tp ${SOURCE_FILES})
 
@@ -46,9 +47,10 @@ target_link_libraries(s3tp pthread)
 set(CONNECTOR_SRC_FILES
         connector/s3tp_connector.cpp
         connector/s3tp_connector.h
-        connector/s3tp_shared.h
-        connector/s3tp_shared.cpp
-        test/connector_main.cpp)
+        core/s3tp_shared.h
+        core/s3tp_shared.cpp
+        test/connector_main.cpp
+        core/Logger.h)
 
 add_executable(s3tp_conn ${CONNECTOR_SRC_FILES})
 

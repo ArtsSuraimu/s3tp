@@ -12,7 +12,7 @@ TxModule::TxModule() {
     pthread_mutex_init(&tx_mutex, NULL);
     pthread_cond_init(&tx_cond, NULL);
     outBuffer = new Buffer(this);
-    printf("Created Tx Module\n");
+    LOG_DEBUG("Created Tx Module");
 }
 
 //Dtor
@@ -20,7 +20,7 @@ TxModule::~TxModule() {
     pthread_mutex_lock(&tx_mutex);
     pthread_mutex_unlock(&tx_mutex);
     pthread_mutex_destroy(&tx_mutex);
-    printf("Destroyed Tx Module\n");
+    LOG_DEBUG("Destroyed Tx Module");
 }
 
 //Private methods

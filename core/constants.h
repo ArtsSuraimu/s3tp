@@ -11,6 +11,7 @@
 #define VER "0.1"
 
 #include <cstdint>
+#include "s3tp_shared.h"
 
 #define ETH_S3TP 0xBEEF
 #define MTU 1021

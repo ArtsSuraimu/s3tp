@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <cstring>
 #include <unistd.h>
-#include "s3tp_shared.h"
+#include "../core/s3tp_shared.h"
 #include <pthread.h>
 
 class s3tp_connector {
