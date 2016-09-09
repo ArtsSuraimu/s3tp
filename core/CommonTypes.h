@@ -69,12 +69,20 @@ typedef struct tag_s3tp_header
 		seq = (uint16_t)((seq & 0xFF00) | sub_seq);
 	}
 
+    uint16_t getPduLength() {
+        return (uint16_t )(pdu_length & 0x3FFF);
+    }
+
+    void setPduLength(uint16_t pdu_len) {
+        pdu_length = (uint16_t)((pdu_length & 0x4000) | pdu_len);
+    }
+
 	uint8_t getMessageType() {
 		return (uint8_t)(pdu_length >> 14);
 	}
 
 	void setMessageType(uint8_t type) {
-		pdu_length |= (type << 14);
+        pdu_length = (uint16_t )((pdu_length & 0x3FFF) | (type << 14));
 	}
 }S3TP_HEADER;
 
@@ -82,6 +90,7 @@ typedef struct tag_s3tp_PACKET {
 	S3TP_HEADER hdr;
 	char pdu[LEN_S3TP_PDU];
 }S3TP_PACKET;
+
 #pragma pack(pop)
 
 typedef struct tag_queue_data

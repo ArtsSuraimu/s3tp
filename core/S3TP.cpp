@@ -116,7 +116,7 @@ int S3TP::sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t l
     packet = new S3TP_PACKET();
     memcpy(packet->pdu, data, len);
     packet->hdr.setPort(port);
-    packet->hdr.pdu_length = (uint16_t)len;
+    packet->hdr.setPduLength((uint16_t)len);
     pthread_mutex_lock(&s3tp_mutex);
     status = tx.enqueuePacket(packet, 0, false, channel, opts);
     pthread_mutex_unlock(&s3tp_mutex);
@@ -139,13 +139,13 @@ int S3TP::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len
         if (written + LEN_S3TP_PDU > len) {
             //We are at the last packet, so don't need to write max payload
             memcpy(packet->pdu, dataPtr, len - written);
-            packet->hdr.pdu_length = (uint16_t) (len - written);
+            packet->hdr.setPduLength((uint16_t) (len - written));
         } else {
             //Filling packet payload with max permitted payload
             memcpy(packet->pdu, dataPtr, LEN_S3TP_PDU);
-            packet->hdr.pdu_length = (uint16_t) LEN_S3TP_PDU;
+            packet->hdr.setPduLength((uint16_t) LEN_S3TP_PDU);
         }
-        written += packet->hdr.pdu_length;
+        written += packet->hdr.getPduLength();
         if (written >= len) {
             moreFragments = false;
         }

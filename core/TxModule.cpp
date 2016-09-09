@@ -44,12 +44,12 @@ void TxModule::txRoutine() {
         }
         pthread_mutex_unlock(&tx_mutex);
         S3TP_PACKET * pkt = wrapper->pkt;
-        to_consume_global_seq = (uint8_t)((pkt->hdr.seq >> 8) + 1);
+        to_consume_global_seq = pkt->hdr.getGlobalSequence() + (uint8_t)1;
         to_consume_port_seq[pkt->hdr.getPort()]++;
         printf("TX: Packet sent from port %d to SPI -> glob_seq %d; sub_seq %d; port_seq %d\n",
                pkt->hdr.getPort(),
-               (pkt->hdr.seq >> 8),
-               (pkt->hdr.seq & 0xFF),
+               (pkt->hdr.getGlobalSequence()),
+               (pkt->hdr.getSubSequence()),
                pkt->hdr.seq_port);
 
         bool arq = wrapper->options && S3TP_ARQ;
@@ -117,9 +117,8 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
         pthread_mutex_unlock(&tx_mutex);
         return CODE_INACTIVE_ERROR;
     }
-    uint8_t global_seq = global_seq_num;
-    uint8_t sub_seq = (uint8_t) frag_no;
-    packet->hdr.seq = (uint16_t)((global_seq << 8) | (sub_seq & 0xFF));
+    packet->hdr.setGlobalSequence(global_seq_num);
+    packet->hdr.setSubSequence(frag_no);
     if (more_fragments) {
         packet->hdr.setMoreFragments();
     } else {
@@ -132,7 +131,7 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
     packet->hdr.seq_port = port_sequence[port]++;
     pthread_mutex_unlock(&tx_mutex);
 
-    uint16_t crc = calc_checksum(packet->pdu, packet->hdr.pdu_length);
+    uint16_t crc = calc_checksum(packet->pdu, packet->hdr.getPduLength());
     packet->hdr.crc = crc;
 
     S3TP_PACKET_WRAPPER * wrapper = new S3TP_PACKET_WRAPPER();
@@ -151,8 +150,8 @@ int TxModule::comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER
     pthread_mutex_lock(&tx_mutex);
     offset = to_consume_global_seq;
     //First check global seq number for comparison
-    seq1 = (uint8_t)(element1->pkt->hdr.seq >> 8) - offset;
-    seq2 = (uint8_t)(element2->pkt->hdr.seq >> 8) - offset;
+    seq1 = element1->pkt->hdr.getGlobalSequence() - offset;
+    seq2 = element2->pkt->hdr.getGlobalSequence() - offset;
     if (seq1 < seq2) {
         comp = -1; //Element 1 is lower, hence has higher priority
     } else if (seq1 > seq2) {

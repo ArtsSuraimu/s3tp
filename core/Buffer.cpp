@@ -42,7 +42,7 @@ int Buffer::write(S3TP_PACKET_WRAPPER * packet) {
     }
     queue->push(packet, comparator);
     packet_counter[port] = queue->getSize();
-    printf("BUFFER port %d: packet %d written (%d bytes)\n", port, packet->pkt->hdr.seq, packet->pkt->hdr.pdu_length);
+    printf("BUFFER port %d: packet %d written (%d bytes)\n", port, packet->pkt->hdr.seq, packet->pkt->hdr.getPduLength());
     pthread_mutex_unlock(&buffer_mutex);
 
     return CODE_SUCCESS;

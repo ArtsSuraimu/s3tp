@@ -108,7 +108,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
     }
 
     //Checking CRC
-    uint16_t check = calc_checksum(packet->pdu, packet->hdr.pdu_length);
+    uint16_t check = calc_checksum(packet->pdu, packet->hdr.getPduLength());
     if (check != packet->hdr.crc) {
         printf("Wrong CRC\n");
         return CODE_ERROR_CRC_INVALID;
@@ -126,7 +126,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
     pktCopy->hdr.pdu_length = packet->hdr.pdu_length;
     pktCopy->hdr.crc = packet->hdr.crc;
     pktCopy->hdr.seq_port = packet->hdr.seq_port;
-    memcpy(pktCopy->pdu, packet->pdu, packet->hdr.pdu_length);
+    memcpy(pktCopy->pdu, packet->pdu, packet->hdr.getPduLength());
 
     S3TP_PACKET_WRAPPER * wrapper = new S3TP_PACKET_WRAPPER();
     wrapper->channel = channel;
@@ -138,7 +138,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
         return result;
     }
     printf("RX: Packet received from SPI to port %d -> glob_seq %d, sub_seq %d, port_seq %d\n",
-           pktCopy->hdr.getPort(), (pktCopy->hdr.seq >> 8), (pktCopy->hdr.seq & 0x7F), pktCopy->hdr.seq_port);
+           pktCopy->hdr.getPort(), (pktCopy->hdr.getGlobalSequence()), (pktCopy->hdr.getSubSequence()), pktCopy->hdr.seq_port);
 
     pthread_mutex_lock(&rx_mutex);
     if (isCompleteMessageForPortAvailable(pktCopy->hdr.getPort())) {
@@ -169,11 +169,11 @@ bool RxModule::isCompleteMessageForPortAvailable(int port) {
         if (pkt->hdr.seq_port != (current_port_sequence[port] + fragment)) {
             //Packet in queue is not the one with highest priority
             break; //Will return false
-        } else if (pkt->hdr.moreFragments() && (uint8_t)pkt->hdr.seq != fragment) {
+        } else if (pkt->hdr.moreFragments() && pkt->hdr.getSubSequence() != fragment) {
             //Current fragment number is not the expected number,
             // i.e. at least one fragment is missing to complete the message
             break; //Will return false
-        } else if (!pkt->hdr.moreFragments() && (uint8_t)pkt->hdr.seq == fragment) {
+        } else if (!pkt->hdr.moreFragments() && pkt->hdr.getSubSequence() == fragment) {
             //Packet is last fragment, message is complete
             q->unlock();
             return true;
@@ -225,9 +225,9 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
             //TODO: throw some severe error
             return NULL;
         }
-        char * end = pkt->pdu + (sizeof(char) * pkt->hdr.pdu_length);
+        char * end = pkt->pdu + (sizeof(char) * pkt->hdr.getPduLength());
         assembledData.insert(assembledData.end(), pkt->pdu, end);
-        *len += pkt->hdr.pdu_length;
+        *len += pkt->hdr.getPduLength();
         current_port_sequence[it->first]++;
         if (!pkt->hdr.moreFragments()) {
             *port = it->first;
@@ -251,8 +251,8 @@ int RxModule::comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER
     pthread_mutex_lock(&rx_mutex);
     offset = to_consume_global_seq;
     //First check global seq number for comparison
-    seq1 = (uint8_t)(element1->pkt->hdr.seq >> 8) - offset;
-    seq2 = (uint8_t)(element2->pkt->hdr.seq >> 8) - offset;
+    seq1 = element1->pkt->hdr.getGlobalSequence() - offset;
+    seq2 = element2->pkt->hdr.getGlobalSequence() - offset;
     if (seq1 < seq2) {
         comp = -1; //Element 1 is lower, hence has higher priority
     } else if (seq1 > seq2) {
