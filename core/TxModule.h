@@ -5,7 +5,7 @@
 #ifndef S3TP_TXMODULE_H
 #define S3TP_TXMODULE_H
 
-#include "constants.h"
+#include "Constants.h"
 #include "Buffer.h"
 #include "utilities.h"
 #include <map>
@@ -15,7 +15,7 @@
 #define TX_PARAM_CUSTOM 0x02
 #define CODE_INACTIVE_ERROR -1
 
-class TxModule : public PriorityComparator<S3TP_PACKET_WRAPPER *> {
+class TxModule : public PriorityComparator<S3TP_PACKET *> {
 public:
     enum STATE {
         RUNNING,
@@ -47,7 +47,7 @@ private:
 
     void txRoutine();
     static void * staticTxRoutine(void * args);
-    virtual int comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER* element2);
+    virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
 };
 
 #endif //S3TP_TXMODULE_H

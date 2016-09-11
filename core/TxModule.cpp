@@ -38,23 +38,24 @@ void TxModule::txRoutine() {
             continue;
         }
         state = RUNNING;
-        S3TP_PACKET_WRAPPER * wrapper = outBuffer->getNextAvailablePacket();
-        if (wrapper == NULL) {
+        S3TP_PACKET * packet = outBuffer->getNextAvailablePacket();
+        if (packet == NULL) {
             continue;
         }
         pthread_mutex_unlock(&tx_mutex);
-        S3TP_PACKET * pkt = wrapper->pkt;
-        to_consume_global_seq = pkt->hdr.getGlobalSequence() + (uint8_t)1;
-        to_consume_port_seq[pkt->hdr.getPort()]++;
+        S3TP_HEADER * hdr = packet->getHeader();
+        to_consume_global_seq = hdr->getGlobalSequence() + (uint8_t)1;
+        to_consume_port_seq[hdr->getPort()]++;
 
-        LOG_DEBUG(std::string("TX: Packet sent from port " + std::to_string((int)pkt->hdr.getPort())
-                              + " to Link Layer -> glob_seq: " + std::to_string(pkt->hdr.getGlobalSequence())
-                              + ", sub_seq: " + std::to_string(pkt->hdr.getSubSequence())
-                              + ", port_seq: " + std::to_string(pkt->hdr.seq_port)));
+        LOG_DEBUG(std::string("TX: Packet sent from port " + std::to_string((int)hdr->getPort())
+                              + " to Link Layer -> glob_seq: " + std::to_string((int)hdr->getGlobalSequence())
+                              + ", sub_seq: " + std::to_string((int)hdr->getSubSequence())
+                              + ", port_seq: " + std::to_string((int)hdr->seq_port)));
 
-        bool arq = wrapper->options && S3TP_ARQ;
-        linkInterface->sendFrame(arq, wrapper->channel, pkt, sizeof(S3TP_PACKET));
-        delete wrapper;
+        bool arq = packet->options & S3TP_ARQ;
+        linkInterface->sendFrame(arq, packet->channel, packet->packet, packet->getLength());
+        //TODO: save in history queue (once implemented)
+        delete packet;
         pthread_mutex_lock(&tx_mutex);
     }
     pthread_mutex_unlock(&tx_mutex);
@@ -120,41 +121,38 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
         pthread_mutex_unlock(&tx_mutex);
         return CODE_INACTIVE_ERROR;
     }
-    packet->hdr.setGlobalSequence(global_seq_num);
-    packet->hdr.setSubSequence(frag_no);
+    S3TP_HEADER * hdr = packet->getHeader();
+    hdr->setGlobalSequence(global_seq_num);
+    hdr->setSubSequence(frag_no);
     if (more_fragments) {
-        packet->hdr.setMoreFragments();
+        hdr->setMoreFragments();
     } else {
-        packet->hdr.unsetMoreFragments();
+        hdr->unsetMoreFragments();
         //Need to increase the current global sequence
         global_seq_num++;
     }
     //Increasing port sequence
-    int port = packet->hdr.getPort();
-    packet->hdr.seq_port = port_sequence[port]++;
+    int port = hdr->getPort();
+    hdr->seq_port = port_sequence[port]++;
     pthread_mutex_unlock(&tx_mutex);
 
-    uint16_t crc = calc_checksum(packet->pdu, packet->hdr.getPduLength());
-    packet->hdr.crc = crc;
+    uint16_t crc = calc_checksum(packet->getPayload(), hdr->getPduLength());
+    hdr->crc = crc;
 
-    S3TP_PACKET_WRAPPER * wrapper = new S3TP_PACKET_WRAPPER();
-    wrapper->pkt = packet;
-    wrapper->options = options;
-    wrapper->channel = (uint8_t) spi_channel;
-    outBuffer->write(wrapper);
+    outBuffer->write(packet);
     pthread_cond_signal(&tx_cond);
 
     return CODE_SUCCESS;
 }
 
-int TxModule::comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER* element2) {
+int TxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     int comp = 0;
     uint8_t seq1, seq2, offset;
     pthread_mutex_lock(&tx_mutex);
     offset = to_consume_global_seq;
     //First check global seq number for comparison
-    seq1 = element1->pkt->hdr.getGlobalSequence() - offset;
-    seq2 = element2->pkt->hdr.getGlobalSequence() - offset;
+    seq1 = element1->getHeader()->getGlobalSequence() - offset;
+    seq2 = element2->getHeader()->getGlobalSequence() - offset;
     if (seq1 < seq2) {
         comp = -1; //Element 1 is lower, hence has higher priority
     } else if (seq1 > seq2) {
@@ -164,9 +162,9 @@ int TxModule::comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER
         pthread_mutex_unlock(&tx_mutex);
         return comp;
     }
-    offset = to_consume_port_seq[element1->pkt->hdr.getPort()];
-    seq1 = element1->pkt->hdr.seq_port - offset;
-    seq2 = element2->pkt->hdr.seq_port - offset;
+    offset = to_consume_port_seq[element1->getHeader()->getPort()];
+    seq1 = element1->getHeader()->seq_port - offset;
+    seq2 = element2->getHeader()->seq_port - offset;
     if (seq1 < seq2) {
         comp = -1; //Element 1 is lower, hence has higher priority
     } else if (seq1 > seq2) {
