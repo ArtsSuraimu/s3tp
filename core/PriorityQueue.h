@@ -49,14 +49,10 @@ private:
 	uint16_t size;
 };
 
-/*PriorityQueue * init_queue ();
-int push (PriorityQueue *root, S3TP_PACKET_WRAPPER* packet);
-S3TP_PACKET_WRAPPER* pop (PriorityQueue* root);
-S3TP_PACKET_WRAPPER* peek (PriorityQueue* root);
-void deinit_queue (PriorityQueue* root);
-uint32_t computeBufferSize (PriorityQueue* root);
-bool isEmpty(PriorityQueue * root);*/
 
+/*
+ * Implementation
+ */
 
 template <typename T>
 PriorityQueue<T>::PriorityQueue() {
@@ -136,7 +132,6 @@ int PriorityQueue<T>::push(T element, PriorityComparator<T> * comparator) {
 
 	if (size >= MAX_QUEUE_CAPACITY) {
 		//Queue is full, dropping new element
-		//printf("Queue is full, dropping packet with sequence number %d\n", data->hdr.seq);
 		//Exit critical section
 		pthread_mutex_unlock(&q_mutex);
 		return QUEUE_FULL;
@@ -183,7 +178,7 @@ int PriorityQueue<T>::push(T element, PriorityComparator<T> * comparator) {
 	//Exit critical section
 	pthread_mutex_unlock(&q_mutex);
 
-	return 0;
+	return CODE_SUCCESS;
 }
 
 template <typename T>
@@ -216,21 +211,5 @@ template <typename T>
 PriorityQueue_node<T> * PriorityQueue<T>::getHead() {
 	return head;
 }
-
-/*	//TODO: implement properly, with correct seq check
-		else if (ref->element->pkt->hdr.seq < data->hdr.seq) {
-			//New node has higher sequence number than current element. New node has lower priority -> append it here
-			swap = ref->next;
-			ref->next = newNode;
-			newNode->prev = ref;
-			newNode->next = swap;
-			if (swap != NULL) {
-				swap->prev = newNode;
-			} else {
-				root->tail = newNode;
-			}
-			break;*/
-
-
 
 #endif /* CORE_QUEUE_H_ */
