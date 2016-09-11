@@ -86,10 +86,42 @@ typedef struct tag_s3tp_header
 	}
 }S3TP_HEADER;
 
-typedef struct tag_s3tp_PACKET {
+/**
+ * Structure containing an S3TP packet, made up of an S3TP header and its payload.
+ * The underlying buffer is given by a char array, in which the first sizeof(S3TP_HEADER) bytes are the header,
+ * while all the following bytes are part of the payload.
+ *
+ * The structure furthermore contains metadata needed by the protocol, such as options and the virtual channel.
+ */
+struct S3TP_PACKET{
+	char * packet;
+	uint8_t channel;
+	uint8_t options;
+
+	S3TP_PACKET(const char * pdu, uint16_t pduLen) {
+		packet = new char[sizeof(S3TP_HEADER) + (pduLen * sizeof(char))];
+		memcpy(getPayload(), pdu, pduLen);
+		S3TP_HEADER * header = getHeader();
+		header->setPduLength(pduLen);
+	}
+
+	int getLength() {
+		return (sizeof(S3TP_HEADER) + (getHeader()->getPduLength() * sizeof(char)));
+	}
+
+	char * getPayload() {
+		return packet + (sizeof(S3TP_HEADER));
+	}
+
+	S3TP_HEADER * getHeader() {
+		return (S3TP_HEADER *)packet;
+	}
+};
+
+/*typedef struct tag_s3tp_PACKET {
 	S3TP_HEADER hdr;
 	char pdu[LEN_S3TP_PDU];
-}S3TP_PACKET;
+}S3TP_PACKET;*/
 
 #pragma pack(pop)
 
