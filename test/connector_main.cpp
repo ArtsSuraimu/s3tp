@@ -2,20 +2,26 @@
 // Created by Lorenzo Donini on 01/09/16.
 //
 
-#include "../connector/s3tp_connector.h"
+#include "../connector/S3tpConnector.h"
 #include <string>
 #include <iostream>
 
 /*
  * Main Test Program
  */
-void dummyCallback(char * msg, size_t len) {
-    if (len <= 0) {
-        printf("Received empty message\n");
-    } else {
-        printf("Received message %s\n", msg);
+class CallbackClass: public S3tpCallback {
+    virtual void onNewMessage(char * data, size_t len) {
+        if (len <= 0) {
+            LOG_INFO("Received empty message");
+            return;
+        }
+        LOG_INFO(std::string("Received message <" + std::string(data, len) + ">"));
     }
-}
+
+    virtual void onError(int code, char * error) {
+        LOG_ERROR(std::string("Received error with code " + std::to_string(code)));
+    }
+};
 
 struct MyTest {
     int val1;
@@ -24,8 +30,9 @@ struct MyTest {
 };
 
 int main() {
-    s3tp_connector connector;
+    S3tpConnector connector;
     S3TP_CONFIG config;
+    CallbackClass callback;
     bool async = false;
     int port = 0;
 
@@ -42,7 +49,7 @@ int main() {
         connector.init(config, nullptr);
     } else {
         async = true;
-        connector.init(config, dummyCallback);
+        connector.init(config, &callback);
     }
     sleep(1);
     if (!async) {

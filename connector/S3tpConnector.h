@@ -15,9 +15,9 @@
 #include "S3tpCallback.h"
 #include <pthread.h>
 
-class s3tp_connector {
+class S3tpConnector {
 public:
-    s3tp_connector();
+    S3tpConnector();
     int init(S3TP_CONFIG config, S3tpCallback * callback);
     int send(const void * data, size_t len);
     char * recvRaw(size_t * len, int * error);

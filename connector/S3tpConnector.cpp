@@ -4,19 +4,19 @@
 
 #include "S3tpConnector.h"
 
-s3tp_connector::s3tp_connector() {
+S3tpConnector::S3tpConnector() {
     connected = false;
     pthread_mutex_init(&connector_mutex, NULL);
 }
 
-bool s3tp_connector::isConnected() {
+bool S3tpConnector::isConnected() {
     pthread_mutex_lock(&connector_mutex);
     bool result = connected;
     pthread_mutex_unlock(&connector_mutex);
     return result;
 }
 
-int s3tp_connector::init(S3TP_CONFIG config, S3tpCallback * callback) {
+int S3tpConnector::init(S3TP_CONFIG config, S3tpCallback * callback) {
     struct sockaddr_un addr;
     ssize_t wr, rd;
     int commCode;
@@ -81,7 +81,7 @@ int s3tp_connector::init(S3TP_CONFIG config, S3tpCallback * callback) {
     return CODE_SUCCESS;
 }
 
-int s3tp_connector::send(const void * data, size_t len) {
+int S3tpConnector::send(const void * data, size_t len) {
     ssize_t wr;
     int error = 0;
 
@@ -112,7 +112,7 @@ int s3tp_connector::send(const void * data, size_t len) {
     return (int)wr;
 }
 
-int s3tp_connector::recv(void * buffer, size_t len) {
+int S3tpConnector::recv(void * buffer, size_t len) {
     int error = 0;
     size_t msg_len;
     ssize_t rd, i;
@@ -164,7 +164,7 @@ int s3tp_connector::recv(void * buffer, size_t len) {
     return (int)rd;
 }
 
-char * s3tp_connector::recvRaw(size_t * len, int * error) {
+char * S3tpConnector::recvRaw(size_t * len, int * error) {
     size_t msg_len = 0;
     ssize_t rd, i;
 
@@ -218,7 +218,7 @@ char * s3tp_connector::recvRaw(size_t * len, int * error) {
     return msg;
 }
 
-void s3tp_connector::closeConnection() {
+void S3tpConnector::closeConnection() {
     pthread_mutex_lock(&connector_mutex);
     if (connected) {
         close(socketDescriptor);
@@ -235,7 +235,7 @@ void s3tp_connector::closeConnection() {
 /*
  * Asynchronous thread routine
  */
-void s3tp_connector::asyncListener() {
+void S3tpConnector::asyncListener() {
     int err = 0;
     ssize_t i, rd;
     size_t len;
@@ -307,8 +307,8 @@ void s3tp_connector::asyncListener() {
     pthread_mutex_unlock(&connector_mutex);
 }
 
-void * s3tp_connector::staticAsyncListener(void * args) {
-    static_cast<s3tp_connector *>(args)->asyncListener();
+void * S3tpConnector::staticAsyncListener(void * args) {
+    static_cast<S3tpConnector *>(args)->asyncListener();
     pthread_exit(NULL);
     return NULL;
 }
