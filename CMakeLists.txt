@@ -13,7 +13,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 set(SOURCE_FILES
         core/s3tp_shared.h
         core/s3tp_shared.cpp
-        core/constants.h
+        core/Constants.h
         core/PriorityQueue.h
         core/CommonTypes.h
         core/TxModule.cpp
