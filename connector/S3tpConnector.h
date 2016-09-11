@@ -12,12 +12,13 @@
 #include <cstring>
 #include <unistd.h>
 #include "../core/s3tp_shared.h"
+#include "S3tpCallback.h"
 #include <pthread.h>
 
 class s3tp_connector {
 public:
     s3tp_connector();
-    int init(S3TP_CONFIG config, S3TP_CALLBACK callback);
+    int init(S3TP_CONFIG config, S3tpCallback * callback);
     int send(const void * data, size_t len);
     char * recvRaw(size_t * len, int * error);
     int recv(void * buffer, size_t len);
@@ -29,7 +30,7 @@ private:
     pthread_mutex_t connector_mutex;
     pthread_t listener_thread;
     S3TP_CONFIG config;
-    S3TP_CALLBACK callback;
+    S3tpCallback * callback;
 
     void asyncListener();
     static void * staticAsyncListener(void * args);

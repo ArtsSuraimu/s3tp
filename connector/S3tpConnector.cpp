@@ -2,7 +2,7 @@
 // Created by Lorenzo Donini on 30/08/16.
 //
 
-#include "s3tp_connector.h"
+#include "S3tpConnector.h"
 
 s3tp_connector::s3tp_connector() {
     connected = false;
@@ -16,7 +16,7 @@ bool s3tp_connector::isConnected() {
     return result;
 }
 
-int s3tp_connector::init(S3TP_CONFIG config, S3TP_CALLBACK callback) {
+int s3tp_connector::init(S3TP_CONFIG config, S3tpCallback * callback) {
     struct sockaddr_un addr;
     ssize_t wr, rd;
     int commCode;
@@ -300,16 +300,15 @@ void s3tp_connector::asyncListener() {
         os << "Received data (" << len << " bytes) on port " << config.port << ": <";
         os << message << ">";
         LOG_DEBUG(os.str());
-        callback(message, len);
+        callback->onNewMessage(message, len);
 
         pthread_mutex_lock(&connector_mutex);
     }
     pthread_mutex_unlock(&connector_mutex);
-
-    pthread_exit(NULL);
 }
 
 void * s3tp_connector::staticAsyncListener(void * args) {
     static_cast<s3tp_connector *>(args)->asyncListener();
+    pthread_exit(NULL);
     return NULL;
 }
