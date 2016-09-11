@@ -6,7 +6,7 @@
 #define S3TP_RXMODULE_H
 
 #include "Buffer.h"
-#include "constants.h"
+#include "Constants.h"
 #include "utilities.h"
 #include "StatusInterface.h"
 #include <cstring>
@@ -24,7 +24,7 @@
 #define MAX_REORDERING_WINDOW 256
 
 class RxModule: public Transceiver::LinkCallback,
-                        PriorityComparator<S3TP_PACKET_WRAPPER*> {
+                        PriorityComparator<S3TP_PACKET*> {
 public:
     RxModule();
     ~RxModule();
@@ -37,7 +37,7 @@ public:
     bool isNewMessageAvailable();
     void waitForNextAvailableMessage(pthread_mutex_t * callerMutex);
     char * getNextCompleteMessage(uint16_t * len, int * error, uint8_t * port);
-    virtual int comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER* element2);
+    virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
 private:
     bool active;
     Buffer * inBuffer;
@@ -53,7 +53,7 @@ private:
 
     // LinkCallback
     void handleFrame(bool arq, int channel, const void* data, int length);
-    int handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel);
+    int handleReceivedPacket(S3TP_PACKET * packet);
     void handleLinkStatus(bool linkStatus);
     bool isPortOpen(uint8_t port);
     bool isCompleteMessageForPortAvailable(int port);

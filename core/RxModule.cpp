@@ -53,7 +53,9 @@ void RxModule::handleFrame(bool arq, int channel, const void* data, int length) 
     if (length != MAX_LEN_S3TP_PACKET) {
         //TODO: handle error
     }
-    int result = handleReceivedPacket((S3TP_PACKET *)data, (uint8_t )channel);
+    //Copying packet. Data argument is not needed anymore afterwards
+    S3TP_PACKET * packet = new S3TP_PACKET((char *)data, length, (uint8_t)channel);
+    int result = handleReceivedPacket(packet);
     //TODO: handle error
 }
 
@@ -102,55 +104,44 @@ bool RxModule::isPortOpen(uint8_t port) {
     return result;
 }
 
-int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
+int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     if (!isActive()) {
         return MODULE_INACTIVE;
     }
 
     //Checking CRC
-    uint16_t check = calc_checksum(packet->pdu, packet->hdr.getPduLength());
-    if (check != packet->hdr.crc) {
-        LOG_WARN(std::string("Wrong CRC for packet " + std::to_string(packet->hdr.getGlobalSequence())));
+    S3TP_HEADER * hdr = packet->getHeader();
+    //TODO: check if pdu length + header size > total length (there might've been an error), otherwise buffer overflow
+    uint16_t check = calc_checksum(packet->getPayload(), hdr->getPduLength());
+    if (check != hdr->crc) {
+        LOG_WARN(std::string("Wrong CRC for packet " + std::to_string((int)hdr->getGlobalSequence())));
         return CODE_ERROR_CRC_INVALID;
     }
 
-    if (!isPortOpen(packet->hdr.getPort())) {
+    if (!isPortOpen(hdr->getPort())) {
         //Dropping packet right away
-        LOG_INFO(std::string("Incoming packet " + std::to_string(packet->hdr.getGlobalSequence())
-                             + "for port " + std::to_string(packet->hdr.getPort())
+        LOG_INFO(std::string("Incoming packet " + std::to_string(hdr->getGlobalSequence())
+                             + "for port " + std::to_string(hdr->getPort())
                              + " was dropped because port is closed"));
         return CODE_ERROR_PORT_CLOSED;
     }
 
-    //Copying packet
-    S3TP_PACKET * pktCopy = new S3TP_PACKET();
-    pktCopy->hdr.seq = packet->hdr.seq;
-    pktCopy->hdr.port = packet->hdr.port;
-    pktCopy->hdr.pdu_length = packet->hdr.pdu_length;
-    pktCopy->hdr.crc = packet->hdr.crc;
-    pktCopy->hdr.seq_port = packet->hdr.seq_port;
-    memcpy(pktCopy->pdu, packet->pdu, packet->hdr.getPduLength());
-
-    S3TP_PACKET_WRAPPER * wrapper = new S3TP_PACKET_WRAPPER();
-    wrapper->channel = channel;
-    wrapper->pkt = pktCopy;
-
-    int result = inBuffer->write(wrapper);
+    int result = inBuffer->write(packet);
     if (result != CODE_SUCCESS) {
         //Something bad happened, couldn't put packet in buffer
         return result;
     }
 
     LOG_DEBUG(std::string("RX: Packet received from SPI to port "
-                          + std::to_string((int)pktCopy->hdr.getPort())
-                          + " -> glob_seq " + std::to_string((int)pktCopy->hdr.getGlobalSequence())
-                          + ", sub_seq " + std::to_string((int)pktCopy->hdr.getSubSequence())
-                          + ", port_seq" + std::to_string((int)pktCopy->hdr.seq_port)));
+                          + std::to_string((int)hdr->getPort())
+                          + " -> glob_seq " + std::to_string((int)hdr->getGlobalSequence())
+                          + ", sub_seq " + std::to_string((int)hdr->getSubSequence())
+                          + ", port_seq" + std::to_string((int)hdr->seq_port)));
 
     pthread_mutex_lock(&rx_mutex);
-    if (isCompleteMessageForPortAvailable(pktCopy->hdr.getPort())) {
+    if (isCompleteMessageForPortAvailable(hdr->getPort())) {
         //New message is available, notify
-        available_messages[pktCopy->hdr.getPort()] = 1;
+        available_messages[hdr->getPort()] = 1;
         pthread_cond_signal(&available_msg_cond);
     }
     pthread_mutex_unlock(&rx_mutex);
@@ -167,20 +158,21 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
 }
 
 bool RxModule::isCompleteMessageForPortAvailable(int port) {
-    PriorityQueue<S3TP_PACKET_WRAPPER*> * q = inBuffer->getQueue(port);
+    PriorityQueue<S3TP_PACKET*> * q = inBuffer->getQueue(port);
     q->lock();
-    PriorityQueue_node<S3TP_PACKET_WRAPPER*> * node = q->getHead();
+    PriorityQueue_node<S3TP_PACKET*> * node = q->getHead();
     uint8_t fragment = 0;
     while (node != NULL) {
-        S3TP_PACKET * pkt = node->element->pkt;
-        if (pkt->hdr.seq_port != (current_port_sequence[port] + fragment)) {
+        S3TP_PACKET * pkt = node->element;
+        S3TP_HEADER * hdr = pkt->getHeader();
+        if (hdr->seq_port != (current_port_sequence[port] + fragment)) {
             //Packet in queue is not the one with highest priority
             break; //Will return false
-        } else if (pkt->hdr.moreFragments() && pkt->hdr.getSubSequence() != fragment) {
+        } else if (hdr->moreFragments() && hdr->getSubSequence() != fragment) {
             //Current fragment number is not the expected number,
             // i.e. at least one fragment is missing to complete the message
             break; //Will return false
-        } else if (!pkt->hdr.moreFragments() && pkt->hdr.getSubSequence() == fragment) {
+        } else if (!hdr->moreFragments() && hdr->getSubSequence() == fragment) {
             //Packet is last fragment, message is complete
             q->unlock();
             return true;
@@ -229,17 +221,18 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
     bool messageAssembled = false;
     std::vector<char> assembledData;
     while (!messageAssembled) {
-        S3TP_PACKET * pkt = inBuffer->getNextPacket(it->first)->pkt;
-        if (pkt->hdr.seq_port != current_port_sequence[it->first]) {
+        S3TP_PACKET * pkt = inBuffer->getNextPacket(it->first);
+        S3TP_HEADER * hdr = pkt->getHeader();
+        if (hdr->seq_port != current_port_sequence[it->first]) {
             *error = CODE_ERROR_INCONSISTENT_STATE;
             LOG_ERROR("RX: inconsistency between packet sequence port and expected sequence port");
             return NULL;
         }
-        char * end = pkt->pdu + (sizeof(char) * pkt->hdr.getPduLength());
-        assembledData.insert(assembledData.end(), pkt->pdu, end);
-        *len += pkt->hdr.getPduLength();
+        char * end = pkt->getPayload() + (sizeof(char) * hdr->getPduLength());
+        assembledData.insert(assembledData.end(), pkt->getPayload(), end);
+        *len += hdr->getPduLength();
         current_port_sequence[it->first]++;
-        if (!pkt->hdr.moreFragments()) {
+        if (!hdr->moreFragments()) {
             *port = it->first;
             messageAssembled = true;
         }
@@ -258,14 +251,14 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
     return data;
 }
 
-int RxModule::comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER* element2) {
+int RxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     int comp = 0;
     uint8_t seq1, seq2, offset;
     pthread_mutex_lock(&rx_mutex);
     offset = to_consume_global_seq;
     //First check global seq number for comparison
-    seq1 = element1->pkt->hdr.getGlobalSequence() - offset;
-    seq2 = element2->pkt->hdr.getGlobalSequence() - offset;
+    seq1 = element1->getHeader()->getGlobalSequence() - offset;
+    seq2 = element2->getHeader()->getGlobalSequence() - offset;
     if (seq1 < seq2) {
         comp = -1; //Element 1 is lower, hence has higher priority
     } else if (seq1 > seq2) {
@@ -275,9 +268,9 @@ int RxModule::comparePriority(S3TP_PACKET_WRAPPER* element1, S3TP_PACKET_WRAPPER
         pthread_mutex_unlock(&rx_mutex);
         return comp;
     }
-    offset = current_port_sequence[element1->pkt->hdr.getPort()];
-    seq1 = element1->pkt->hdr.seq_port - offset;
-    seq2 = element2->pkt->hdr.seq_port - offset;
+    offset = current_port_sequence[element1->getHeader()->getPort()];
+    seq1 = element1->getHeader()->seq_port - offset;
+    seq2 = element2->getHeader()->seq_port - offset;
     if (seq1 < seq2) {
         comp = -1; //Element 1 is lower, hence has higher priority
     } else if (seq1 > seq2) {
