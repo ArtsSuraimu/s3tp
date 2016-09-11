@@ -9,6 +9,6 @@
 #define CORE_INIT_H_
 
 #include "CommonTypes.h"
-#include "constants.h"
+#include "Constants.h"
 
 #endif /* CORE_INIT_H_ */

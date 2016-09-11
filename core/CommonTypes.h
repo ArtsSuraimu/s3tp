@@ -9,7 +9,7 @@
 #define CORE_S3TP_TYPES_H_
 
 #include <stdlib.h>
-#include "constants.h"
+#include "Constants.h"
 
 typedef int SOCKET;
 
@@ -103,6 +103,13 @@ struct S3TP_PACKET{
 		memcpy(getPayload(), pdu, pduLen);
 		S3TP_HEADER * header = getHeader();
 		header->setPduLength(pduLen);
+	}
+
+	S3TP_PACKET(const char * packet, int len, uint8_t channel) {
+		//Copying a well formed packet, where all header fields should already be consistent
+		this->packet = new char[len * sizeof(char)];
+		memcpy(this->packet, packet, (size_t)len);
+		this->channel = channel;
 	}
 
 	int getLength() {
