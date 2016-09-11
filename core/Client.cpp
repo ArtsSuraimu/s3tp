@@ -165,6 +165,9 @@ void Client::clientRoutine() {
         }
         //Forward data to s3tp module (through Client interface callback)
         int result = client_if->onApplicationMessage(message, len, this);
+        //s3tp protocol copies contents of message, so we need to free this temp buffer
+        delete message;
+        //TODO: maybe wait with deletion because tx buffer may be full
         if (result < 0) {
             LOG_ERROR(std::string("Error while communicating with s3tp module " + std::to_string(socket)));
             //TODO: kill connection?!
