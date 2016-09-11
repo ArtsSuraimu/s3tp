@@ -40,9 +40,18 @@ int Buffer::write(S3TP_PACKET_WRAPPER * packet) {
         queue = new PriorityQueue<S3TP_PACKET_WRAPPER*>();
         queues[port] = queue;
     }
-    queue->push(packet, comparator);
-    packet_counter[port] = queue->getSize();
-    printf("BUFFER port %d: packet %d written (%d bytes)\n", port, packet->pkt->hdr.seq, packet->pkt->hdr.getPduLength());
+    if (queue->push(packet, comparator) == QUEUE_FULL) {
+        LOG_INFO(std::string("Queue " + std::to_string(port)
+                              + " full. Dropped packet with sequence number "
+                              + std::to_string(packet->pkt->hdr.seq_port)));
+    } else {
+        packet_counter[port] = queue->getSize();
+        LOG_DEBUG(std::string("Queue " + std::to_string(port)
+                              + ": packet "
+                              + std::to_string(packet->pkt->hdr.seq_port) + " written ("
+                              + std::to_string(packet->pkt->hdr.getPduLength()) + " bytes)"));
+    }
+
     pthread_mutex_unlock(&buffer_mutex);
 
     return CODE_SUCCESS;

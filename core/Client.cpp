@@ -40,7 +40,8 @@ void Client::closeConnection() {
     pthread_mutex_lock(&client_mutex);
     if (connected) {
         close(socket);
-        printf("Closed socket %d\n", socket);
+
+        LOG_DEBUG(std::string("Closed socket " + std::to_string(socket)));
     }
     connected = false;
     pthread_mutex_unlock(&client_mutex);
@@ -76,23 +77,25 @@ void Client::kill() {
 }
 
 int Client::send(const void * data, size_t len) {
+    //Sending length of message first
     int error = write_length_safe(socket, len);
     if (error == CODE_ERROR_SOCKET_NO_CONN) {
-        printf("Connection was closed by peer\n");
+        LOG_WARN(std::string("Connection was closed by s3tp client " + std::to_string(socket)));
         handleConnectionClosed();
         return error;
     } else if (error == CODE_ERROR_SOCKET_WRITE) {
-        printf("Error while writing on socket\n");
+        LOG_WARN(std::string("Error while writing on socket " + std::to_string(socket)));
         closeConnection();
         return error;
     }
+    //Sending message content
     ssize_t wr = write(socket, data, len);
     if (wr == 0) {
-        printf("Error while writing echo response\n");
+        LOG_WARN(std::string("Connection was closed by s3tp client " + std::to_string(socket)));
         handleConnectionClosed();
         return CODE_ERROR_SOCKET_NO_CONN;
     } else if (wr < 0) {
-        printf("Error while writing echo response\n");
+        LOG_WARN(std::string("Error while writing data on socket " + std::to_string(socket)));
         closeConnection();
         return CODE_ERROR_SOCKET_WRITE;
     }
@@ -104,15 +107,15 @@ void Client::clientRoutine() {
     size_t len = 0;
     int error = 0;
 
-    printf("Started Client thread\n");
+    LOG_DEBUG(std::string("Started client thread for socket " + std::to_string(socket)));
     while (isConnected()) {
         error = read_length_safe(socket, &len);
         if (error == CODE_ERROR_SOCKET_NO_CONN) {
-            printf("Client %d closed socket\n", socket);
+            LOG_INFO(std::string("Client closed socket " + std::to_string(socket)));
             handleConnectionClosed();
             break;
         } else if (error < 0) {
-            printf("Error reading from Client %d\n", socket);
+            LOG_WARN(std::string("Error while reading from client on socket " + std::to_string(socket)));
             closeConnection();
             break;
         }
@@ -127,13 +130,13 @@ void Client::clientRoutine() {
             i = read(socket, currentPosition, (len - rd));
             if (i == 0) {
                 //EOF read
-                printf("Client %d closed socket\n", socket);
+                LOG_WARN(std::string("Client closed socket " + std::to_string(socket)));
                 closeConnection();
                 delete [] message;
                 //Quitting thread
                 break;
             } else if (i < 0) {
-                printf("Error reading payload\n");
+                LOG_WARN(std::string("Error while reading message from client on socket " + std::to_string(socket)));
                 closeConnection();
                 delete [] message;
                 //Quitting thread
@@ -149,24 +152,22 @@ void Client::clientRoutine() {
         }
 
         //Payload received entirely
-        printf("Client %d on port %d sent data <%s>\n", socket, app_port, message);
+        LOG_DEBUG(std::string("Received "
+                              + std::to_string(len)
+                              + " bytes from port "
+                              + std::to_string(app_port)
+                              + ": <" + message + ">"));
         if (client_if == NULL) {
-            printf("Client interface is not connected connected. Aborting Client %d routine\n", socket);
+            LOG_WARN(std::string("Client interface is not connected. Aborting client "
+                                 + std::to_string(socket) + " routine"));
             closeConnection();
             break;
         }
         //Forward data to s3tp module (through Client interface callback)
         int result = client_if->onApplicationMessage(message, len, this);
         if (result < 0) {
-            printf("Error while communicating with s3tp module %d\n", socket);
+            LOG_ERROR(std::string("Error while communicating with s3tp module " + std::to_string(socket)));
             //TODO: kill connection?!
-        } else {
-            //Dummy echo mechanism
-            /*sleep(1);
-            error = send(message, len);
-            if (error != CODE_SUCCESS) {
-                break;
-            }*/
         }
     }
 

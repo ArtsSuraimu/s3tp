@@ -12,6 +12,10 @@
 #include <cstdio>
 #include <string>
 #include <iostream>
+#include <pthread.h>
+
+#define LOCK(mutex) pthread_mutex_lock(mutex)
+#define UNLOCK(mutex) pthread_mutex_unlock(mutex)
 
 #define S3TP_OPTION_ARQ 0x01;
 #define S3TP_OPTION_CUSTOM 0x02;

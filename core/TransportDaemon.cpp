@@ -4,21 +4,19 @@
 
 #include "TransportDaemon.h"
 
-
 int s3tp_daemon::init(void * args) {
     if ((server = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
-        printf("Error creating socket\n");
+        LOG_ERROR("Error creating daemon socket");
         return CODE_ERROR_SOCKET_CREATE;
     }
     unlink(socket_path);
     address.sun_family = AF_UNIX;
-    printf("Socket path %s\n", socket_path);
     strcpy(address.sun_path, socket_path);
 
     int reuse = 1;
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int));
     if (bind(server, (struct sockaddr *) &address, sizeof (address)) != 0) {
-        printf("Error binding socket\n");
+        LOG_ERROR("Error binding daemon socket");
         return CODE_ERROR_SOCKET_BIND;
     }
 
@@ -50,28 +48,33 @@ void s3tp_daemon::startDaemon() {
 
     //Ignore sigpipe signal in case a thread receives a forced disconnection
     signal(SIGPIPE, SIG_IGN);
-    printf("Listening...\n");
+    LOG_INFO("Daemon started listening...");
 
     //Start s3tp_daemon service
     while (true) {
         new_socket = accept(server, (struct sockaddr *)&cl_address, &addrlen);
         if (new_socket < 0) {
-            printf("Error connecting to new Client\n");
+            LOG_ERROR("Error connecting to new client");
             continue;
         }
 
-        printf("Connected to new Client %d\n", new_socket);
+        LOG_INFO(std::string("Connected to new client on socket " + std::to_string(new_socket)));
+
         tv.tv_sec = 2;
         setsockopt(new_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,sizeof(struct timeval));
         //Receive Client configuration
         rd = read(new_socket, &config, sizeof(S3TP_CONFIG));
         if (rd <= 0) {
-            printf("Error reading from new connection\n");
+            LOG_WARN("Error reading from new connection to client. Closing socket");
             close(new_socket);
             continue;
         }
 
-        printf("Received following data from Client %d: port %d, channel %d\n", new_socket, config.port, config.channel);
+        LOG_DEBUG(std::string("Received configuration from new client on socket "
+                              + std::to_string(new_socket)
+                              + ": port " + std::to_string((int)config.port)
+                              + ", channel: " + std::to_string((int)config.channel)));
+
         tv.tv_sec = 0;
         setsockopt(new_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
         if (s3tp.getClientConnectedToPort(config.port) != NULL) {
@@ -80,15 +83,18 @@ void s3tp_daemon::startDaemon() {
             if (write(new_socket, &commCode, sizeof(commCode)) != 0) {
                 close(new_socket);
             }
-            printf("Refused Client %d as port %d is currently busy\n", new_socket, config.port);
+            LOG_INFO(std::string("Refused client " + std::to_string(new_socket)
+                                 + " as port " + std::to_string((int)config.port) + " is currently busy"));
+
         } else {
             commCode = CODE_SERVER_ACCEPT;
             wr = write(new_socket, &commCode, sizeof(commCode));
             if (wr == 0) {
-                printf("Client %d disconnected\n", new_socket);
+                LOG_WARN(std::string("Client " + std::to_string(new_socket) + " disconnected unexpectedly"));
                 continue;
             } else if (wr < 0) {
-                printf("Connection error with Client %d\n", new_socket);
+                LOG_WARN(std::string("Communication error with client " + std::to_string(new_socket)
+                                     + ". Closing socket"));
                 close(new_socket);
                 continue;
             }

@@ -110,12 +110,15 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
     //Checking CRC
     uint16_t check = calc_checksum(packet->pdu, packet->hdr.getPduLength());
     if (check != packet->hdr.crc) {
-        LOG_WARN("Wrong CRC");
+        LOG_WARN(std::string("Wrong CRC for packet " + std::to_string(packet->hdr.getGlobalSequence())));
         return CODE_ERROR_CRC_INVALID;
     }
 
     if (!isPortOpen(packet->hdr.getPort())) {
         //Dropping packet right away
+        LOG_INFO(std::string("Incoming packet " + std::to_string(packet->hdr.getGlobalSequence())
+                             + "for port " + std::to_string(packet->hdr.getPort())
+                             + " was dropped because port is closed"));
         return CODE_ERROR_PORT_CLOSED;
     }
 
@@ -138,13 +141,11 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet, uint8_t channel) {
         return result;
     }
 
-    std::ostringstream stream;
-    stream << "RX: Packet received from SPI to port " << (int)pktCopy->hdr.getPort();
-    stream << " -> glob_seq " << (int)pktCopy->hdr.getGlobalSequence();
-    stream << ", sub_seq " << (int)pktCopy->hdr.getSubSequence();
-    stream << ", port_seq " << (int)pktCopy->hdr.seq_port;
-    LOG_DEBUG(stream.str());
-
+    LOG_DEBUG(std::string("RX: Packet received from SPI to port "
+                          + std::to_string((int)pktCopy->hdr.getPort())
+                          + " -> glob_seq " + std::to_string((int)pktCopy->hdr.getGlobalSequence())
+                          + ", sub_seq " + std::to_string((int)pktCopy->hdr.getSubSequence())
+                          + ", port_seq" + std::to_string((int)pktCopy->hdr.seq_port)));
 
     pthread_mutex_lock(&rx_mutex);
     if (isCompleteMessageForPortAvailable(pktCopy->hdr.getPort())) {

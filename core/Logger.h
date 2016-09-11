@@ -10,6 +10,7 @@
 #include <ctime>
 #include <iomanip>
 #include <string>
+#include <cstdarg>
 
 #define LOG_LEVEL_OFF 0
 #define LOG_LEVEL_FATAL 1

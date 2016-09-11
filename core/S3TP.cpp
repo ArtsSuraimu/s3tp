@@ -181,17 +181,18 @@ void S3TP::assemblyRoutine() {
         if (error != CODE_SUCCESS) {
             LOG_WARN("Error while trying to consume message");
         }
-        std::ostringstream os;
-        os << "Correctly consumed data from queue " << (int)port << " (" << len << " bytes)";
-        LOG_DEBUG(os.str());
+
+        LOG_DEBUG(std::string("Correctly consumed data from queue " + std::to_string((int)port)
+                              + " (" + std::to_string(len) + " bytes)"));
+
         pthread_mutex_lock(&clients_mutex);
         cli = clients[port];
         if (cli != NULL) {
             cli->send(data, len);
             delete data;
         } else {
-            os.clear();
-            os << "Port " << (int)port << " is not open. Couldn't forward data to application";
+            LOG_WARN(std::string("Port " + std::to_string((int)port)
+                                 + " is not open. Couldn't forward data to application"));
         }
         pthread_mutex_unlock(&clients_mutex);
 

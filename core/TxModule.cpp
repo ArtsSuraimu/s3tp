@@ -46,11 +46,11 @@ void TxModule::txRoutine() {
         S3TP_PACKET * pkt = wrapper->pkt;
         to_consume_global_seq = pkt->hdr.getGlobalSequence() + (uint8_t)1;
         to_consume_port_seq[pkt->hdr.getPort()]++;
-        printf("TX: Packet sent from port %d to SPI -> glob_seq %d; sub_seq %d; port_seq %d\n",
-               pkt->hdr.getPort(),
-               (pkt->hdr.getGlobalSequence()),
-               (pkt->hdr.getSubSequence()),
-               pkt->hdr.seq_port);
+
+        LOG_DEBUG(std::string("TX: Packet sent from port " + std::to_string((int)pkt->hdr.getPort())
+                              + " to Link Layer -> glob_seq: " + std::to_string(pkt->hdr.getGlobalSequence())
+                              + ", sub_seq: " + std::to_string(pkt->hdr.getSubSequence())
+                              + ", port_seq: " + std::to_string(pkt->hdr.seq_port)));
 
         bool arq = wrapper->options && S3TP_ARQ;
         linkInterface->sendFrame(arq, wrapper->channel, pkt, sizeof(S3TP_PACKET));
@@ -74,7 +74,8 @@ void TxModule::startRoutine(Transceiver::LinkInterface * spi_if) {
     active = true;
     int txId = pthread_create(&tx_thread, NULL, &TxModule::staticTxRoutine, this);
     pthread_mutex_unlock(&tx_mutex);
-    printf("Tx Thread (id %d): START\n", txId);
+
+    LOG_DEBUG(std::string("TX Thread (id " + std::to_string(txId) + "): START"));
 }
 
 void TxModule::stopRoutine() {
@@ -82,6 +83,8 @@ void TxModule::stopRoutine() {
     active = false;
     pthread_cond_signal(&tx_cond);
     pthread_mutex_unlock(&tx_mutex);
+    pthread_join(tx_thread, NULL);
+    LOG_DEBUG("TX Thread: STOP");
 }
 
 TxModule::STATE TxModule::getCurrentState() {
