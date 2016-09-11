@@ -14,7 +14,6 @@ set(SOURCE_FILES
         core/s3tp_shared.h
         core/s3tp_shared.cpp
         core/constants.h
-        core/PriorityQueue.cpp
         core/PriorityQueue.h
         core/CommonTypes.h
         core/TxModule.cpp
@@ -45,12 +44,13 @@ target_link_libraries(s3tp ${TRCTRL_LIBRARY})
 target_link_libraries(s3tp pthread)
 
 set(CONNECTOR_SRC_FILES
-        connector/s3tp_connector.cpp
-        connector/s3tp_connector.h
+        connector/S3tpConnector.cpp
+        connector/S3tpConnector.h
         core/s3tp_shared.h
         core/s3tp_shared.cpp
         test/connector_main.cpp
-        core/Logger.h)
+        core/Logger.h
+        connector/S3tpCallback.h)
 
 add_executable(s3tp_conn ${CONNECTOR_SRC_FILES})
 
