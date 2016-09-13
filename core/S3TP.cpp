@@ -189,7 +189,7 @@ void S3TP::assemblyRoutine() {
         cli = clients[port];
         if (cli != NULL) {
             cli->send(data, len);
-            delete data;
+            delete[] data;
         } else {
             LOG_WARN(std::string("Port " + std::to_string((int)port)
                                  + " is not open. Couldn't forward data to application"));
