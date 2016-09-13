@@ -29,12 +29,22 @@ struct MyTest {
     long val2;
 };
 
-int main() {
+int main(int argc, char* argv[]) {
+    if (argc != 2)
+    {
+        std::cout << "Illegal arguments\n";
+        return -1;
+    }
+
     S3tpConnector connector;
     S3TP_CONFIG config;
     CallbackClass callback;
     bool async = false;
     int port = 0;
+
+    int argi = 1;
+
+    socket_path = argv[argi++];
 
     std::cout << "Please select a port to connect to: ";
     std::cin >> port;

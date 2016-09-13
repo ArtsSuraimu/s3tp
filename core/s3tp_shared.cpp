@@ -6,7 +6,7 @@
 
 const int LOG_LEVEL = LOG_LEVEL_DEBUG;
 
-const char * socket_path = "/tmp/serv_s3tp";
+char * socket_path = nullptr;
 
 int read_length_safe(int fd, size_t * out_length) {
     ssize_t rd = 0;
