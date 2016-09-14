@@ -1,14 +1,6 @@
-/**
- *     SSSSS     3333333    TTTTTTTTT   PPPPPPP  
- *    SS              33       TTT      PP    PP
- *    SS            33         TTT      PP   PP
- *     SSSSS      33           TTT      PPPPPP  
- *          SS      33         TTT      PP
- *          SS        33       TTT      PP     
- *     SSSSS     3333333       TTT      PP     
- **/
+S3TP
  
- (C) 2016 Dai Yang, Clemens Jonischkeit. All rights Reserved.
+ (C)WARR, LRT, TUM. All rights Reserved.
  In association with WARR, LRT and TUM. 
  
  Simple Sample Satellite Transport Protocol
