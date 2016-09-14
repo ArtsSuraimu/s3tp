@@ -25,6 +25,8 @@ struct PriorityQueue_node {
 	T element;
 	PriorityQueue_node<T> * next;
 	PriorityQueue_node<T> * prev;
+
+	PriorityQueue_node(T element);
 };
 
 template <typename T>
@@ -55,8 +57,20 @@ private:
  */
 
 template <typename T>
-PriorityQueue<T>::PriorityQueue() {
-	size = 0;
+PriorityQueue_node<T>::PriorityQueue_node(T element) :
+	element(element),
+	next(nullptr),
+	prev(nullptr)
+{
+
+}
+
+template <typename T>
+PriorityQueue<T>::PriorityQueue() :
+	head(nullptr),
+	tail(nullptr),
+	size(0)
+{
 	pthread_mutex_init(&q_mutex, NULL);
 }
 
@@ -138,12 +152,15 @@ int PriorityQueue<T>::push(T element, PriorityComparator<T> * comparator) {
 	}
 
 	//Creating new node
-	newNode = (PriorityQueue_node<T>*) calloc(1, sizeof(PriorityQueue_node<T>));
-	newNode->element = element;
+	//newNode = (PriorityQueue_node<T>*) calloc(1, sizeof(PriorityQueue_node<T>));
+	//newNode->element = element;
+	newNode = new PriorityQueue_node<T>(element);
 
 	//Inserting new node inside the priority queue
 	ref = tail;
 	while (1) {
+		std::cout << ref << " " << element << " " << comparator << std::endl;
+		if (ref != nullptr) std::cout << "r->e " << ref->element << std::endl;
 		if (ref == NULL) {
 			//We are at the head of the queue. This is due to the queue being empty.
 			head = newNode;

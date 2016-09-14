@@ -5,7 +5,7 @@
 #include "../core/TransportDaemon.h"
 
 int main(int argc, char ** argv) {
-    if (argc != 2) {
+    if (argc != 3) {
         printf("Invalid arguments\n");
         return -1;
     }
@@ -13,8 +13,12 @@ int main(int argc, char ** argv) {
 
     TRANSCEIVER_CONFIG config;
 
+    int argi = 1;
+
+    socket_path = argv[argi++];
+
     //Creating spi interface
-    char * transceiverType = argv[1];
+    char * transceiverType = argv[argi++];
     if (strcmp(transceiverType, "spi") == 0) {
         config.type = SPI;
         Transceiver::SPIDescriptor desc;

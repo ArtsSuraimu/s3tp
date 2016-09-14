@@ -67,7 +67,7 @@ typedef struct tag_s3tp_length_redundant {
     size_t command[SAFE_TRANSMISSION_COUNT];
 }S3TP_INTRO_REDUNDANT;
 
-extern const char * socket_path;
+extern char * socket_path;
 
 /*
  * Utility functions and macros
