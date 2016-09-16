@@ -16,8 +16,6 @@
 #include <thread>
 #include <mutex>
 
-
-
 class S3tpConnector {
 public:
     S3tpConnector();
@@ -37,7 +35,7 @@ private:
     S3tpCallback * callback;
 
     void asyncListener();
-    static void * staticAsyncListener(void * args);
+    bool acknowledgeMessage();
 };
 
 #endif //S3TP_S3TP_CONNECTOR_H

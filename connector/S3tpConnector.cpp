@@ -91,6 +91,7 @@ int S3tpConnector::init(S3TP_CONFIG config, S3tpCallback * callback) {
 int S3tpConnector::send(const void * data, size_t len) {
     ssize_t wr;
     int error = 0;
+    bool ack;
 
     if (!isConnected()) {
         LOG_ERROR("Trying to write on closed channel. Sutting down");
@@ -107,13 +108,16 @@ int S3tpConnector::send(const void * data, size_t len) {
 
     wr = write(socketDescriptor, data, len);
     if (wr <= 0) {
-        LOG_WARN("Error while reading from S3TP socket");
+        LOG_WARN("Error while writing to S3TP socket");
 
         return CODE_ERROR_SOCKET_WRITE;
     }
 
     LOG_DEBUG(std::string("Written " + std::to_string(wr) + " bytes to S3TP"));
 
+    if (!acknowledgeMessage()) {
+        return CODE_SERVER_QUEUE_FULL;
+    }
     return (int)wr;
 }
 
@@ -304,8 +308,30 @@ void S3tpConnector::asyncListener() {
     }
 }
 
-void * S3tpConnector::staticAsyncListener(void * args) {
-    static_cast<S3tpConnector *>(args)->asyncListener();
-    pthread_exit(NULL);
-    return NULL;
+bool S3tpConnector::acknowledgeMessage() {
+    ssize_t rd;
+    uint8_t ack;
+
+    rd = read(socketDescriptor, &ack, sizeof(uint8_t));
+
+    //Handle socket errors
+    if (rd == CODE_ERROR_SOCKET_NO_CONN) {
+        connector_mutex.lock();
+        connected = false;
+        connector_mutex.unlock();
+        LOG_WARN("Connection to S3TP was closed by server");
+        return false;
+    } else if (rd < 0) {
+        closeConnection();
+        return false;
+    }
+
+    //Checking ack byte. There might have been a single bit flip, so we check the value range
+    if (ack == 0x80 || ack < 0x7F) {
+        //Was supposed to be 0x00
+        return false;
+    } else {
+        //Ack == 0x7F or ack == 0x80 -> Was supposed to be 0xFF
+        return true;
+    }
 }
