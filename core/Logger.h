@@ -6,11 +6,9 @@
 #define S3TP_LOGGER_H
 
 #include <iostream>
-#include <sstream>
 #include <ctime>
 #include <iomanip>
 #include <string>
-#include <cstdarg>
 
 #define LOG_LEVEL_OFF 0
 #define LOG_LEVEL_FATAL 1
@@ -24,9 +22,12 @@ extern const int LOG_LEVEL;
 inline void s3tp_log(std::string logStr) {
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
+
+    std::cerr << std::put_time(&tm, "[%d.%m.%Y %H:%M:%S] ") << logStr << std::endl;
+
+    // Use this in case put_time doesn't work on arm platform
     //char mbstr[32];
     //std::strftime(mbstr, sizeof(mbstr), "%A %c", tm))
-    std::cout << std::put_time(&tm, "[%d.%m.%Y %H:%M:%S] ") << logStr << std::endl;
 }
 
 inline void LOG_DEBUG(std::string logStr) {
