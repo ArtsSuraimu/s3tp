@@ -16,10 +16,14 @@
 #include <trctrl/BackendFactory.h>
 #include <string>
 #include <vector>
+#include <set>
 
 #define CODE_SUCCESS 0
 #define CODE_ERROR_MAX_MESSAGE_SIZE -2
 #define CODE_INTERNAL_ERROR -3
+#define CODE_QUEUE_FULL -4
+#define CODE_LINK_UNAVAIABLE -5
+#define CODE_CHANNEL_BROKEN -6
 
 enum TRANSCEIVER_TYPE {
     SPI,
@@ -61,6 +65,8 @@ private:
     //Clients
     std::map<uint8_t, Client*> clients;
     pthread_mutex_t clients_mutex;
+    std::set<uint8_t> channel_blacklist;
+    int checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t msg_len);
     virtual void onDisconnected(void * params);
     virtual void onConnected(void * params);
     virtual int onApplicationMessage(void * data, size_t len, void * params);

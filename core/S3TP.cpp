@@ -86,14 +86,22 @@ Client * S3TP::getClientConnectedToPort(uint8_t port) {
 }
 
 int S3TP::sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
-    /* As messages should still be sent out sequentially,
-     * we're putting all of them into the fragmentation queue.
-     * Fragmentation thread will then be in charge of checking
-     * whether the message needs fragmentation or not */
+    /* As messages should still be sent out sequentially.
+     * There is not need for a separate fragmentation thread, as the
+     * job will simply be done by the calling client thread.
+     * We first check whether the message can actually be enqueued.
+     * If queue is full or link is not active, the message is not accepted and an error is returned.
+     * */
+    int availability;
+
     pthread_mutex_lock(&s3tp_mutex);
     bool isActive = active;
     pthread_mutex_unlock(&s3tp_mutex);
     if (isActive) {
+        availability = checkTransmissionAvailability(port, channel, (uint16_t)len);
+        if (availability != CODE_SUCCESS) {
+            return availability;
+        }
         if (len > MAX_PDU_LENGTH) {
             //Payload exceeds maximum length: drop packet and return error
             return CODE_ERROR_MAX_MESSAGE_SIZE;
@@ -207,6 +215,25 @@ void S3TP::assemblyRoutine() {
 void * S3TP::staticAssemblyRoutine(void * args) {
     static_cast<S3TP*>(args)->assemblyRoutine();
     return NULL;
+}
+
+int S3TP::checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t msg_len) {
+    if (tx.getCurrentState() == TxModule::STATE::BLOCKED) {
+        return CODE_LINK_UNAVAIABLE;
+    }
+    //Computing number of packets that need to be written
+    uint8_t no_packets = (uint8_t)(msg_len / LEN_S3TP_PDU);
+    if (msg_len % LEN_S3TP_PDU > 0) {
+        no_packets += 1;
+    }
+    //Checking if transmission Q can contain the desired amount of packets
+    if (tx.isQueueAvailable(port, no_packets)) {
+        return CODE_QUEUE_FULL;
+    } else if (channel_blacklist.find(channel) != channel_blacklist.end()) {
+        //Channel is currently broken
+        return CODE_CHANNEL_BROKEN;
+    }
+    return CODE_SUCCESS;
 }
 
 /*
