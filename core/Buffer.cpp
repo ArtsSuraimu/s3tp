@@ -61,6 +61,10 @@ int Buffer::write(S3TP_PACKET * packet) {
 PriorityQueue<S3TP_PACKET *> * Buffer::getQueue(int port) {
     pthread_mutex_lock(&buffer_mutex);
     PriorityQueue<S3TP_PACKET*> * queue = queues[port];
+    if (queue == nullptr) {
+        queue = new PriorityQueue<S3TP_PACKET *>();
+        queues[port] = queue;
+    }
     pthread_mutex_unlock(&buffer_mutex);
     return queue;
 }
