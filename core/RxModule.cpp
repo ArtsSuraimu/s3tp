@@ -112,8 +112,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     //Checking CRC
     S3TP_HEADER * hdr = packet->getHeader();
     //TODO: check if pdu length + header size > total length (there might've been an error), otherwise buffer overflow
-    uint16_t check = calc_checksum(packet->getPayload(), hdr->getPduLength());
-    if (check != hdr->crc) {
+    if (!verify_checksum(packet->getPayload(), hdr->getPduLength(), hdr->crc)) {
         LOG_WARN(std::string("Wrong CRC for packet " + std::to_string((int)hdr->getGlobalSequence())));
         return CODE_ERROR_CRC_INVALID;
     }
