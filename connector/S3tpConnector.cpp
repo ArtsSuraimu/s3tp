@@ -73,9 +73,8 @@ int S3tpConnector::init(S3TP_CONFIG config, S3tpCallback * callback) {
     }
 
     if (commCode == CODE_SERVER_PORT_BUSY) {
-        std::ostringstream os;
-        os << "Cannot use S3TP on port " << config.port << " because it is currently busy";
-        LOG_WARN(os.str());
+        LOG_WARN(std::string("Cannot use S3TP on port " + std::to_string((int)config.port)
+                             + " because it is currently busy"));
 
         closeConnection();
         return CODE_SERVER_PORT_BUSY;
@@ -112,9 +111,8 @@ int S3tpConnector::send(const void * data, size_t len) {
 
         return CODE_ERROR_SOCKET_WRITE;
     }
-    std::ostringstream os;
-    os << "Written " << wr << " bytes to S3TP";
-    LOG_DEBUG(os.str());
+
+    LOG_DEBUG(std::string("Written " + std::to_string(wr) + " bytes to S3TP"));
 
     return (int)wr;
 }
@@ -230,9 +228,7 @@ void S3tpConnector::closeConnection() {
     if (connected) {
         close(socketDescriptor);
 
-        std::ostringstream os;
-        os << "Closed connection (socket " << socketDescriptor << ")";
-        LOG_INFO(os.str());
+        LOG_INFO(std::string("Closed connector (socket " + std::to_string(socketDescriptor) + ")"));
     }
     connected = false;
     //Not waiting for the client_if thread to die for now
@@ -245,7 +241,6 @@ void S3tpConnector::asyncListener() {
     int err = 0;
     ssize_t i, rd;
     size_t len;
-    std::ostringstream os;
 
     LOG_DEBUG("Started Client async listener thread");
 
@@ -302,10 +297,9 @@ void S3tpConnector::asyncListener() {
         //Payload received entirely
         message[len] = '\0';
 
-        os.str("");
-        os << "Received data (" << len << " bytes) on port " << config.port << ": <";
-        os << message << ">";
-        LOG_DEBUG(os.str());
+        LOG_DEBUG(std::string("Received data (" + std::to_string(len)
+                              + " bytes) on port " + std::to_string((int)config.port)
+                              + ": <" + message + ">"));
         callback->onNewMessage(message, len);
     }
 }
