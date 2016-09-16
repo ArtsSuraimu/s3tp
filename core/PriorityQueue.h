@@ -152,15 +152,11 @@ int PriorityQueue<T>::push(T element, PriorityComparator<T> * comparator) {
 	}
 
 	//Creating new node
-	//newNode = (PriorityQueue_node<T>*) calloc(1, sizeof(PriorityQueue_node<T>));
-	//newNode->element = element;
 	newNode = new PriorityQueue_node<T>(element);
 
 	//Inserting new node inside the priority queue
 	ref = tail;
 	while (1) {
-		std::cout << ref << " " << element << " " << comparator << std::endl;
-		if (ref != nullptr) std::cout << "r->e " << ref->element << std::endl;
 		if (ref == NULL) {
 			//We are at the head of the queue. This is due to the queue being empty.
 			head = newNode;
