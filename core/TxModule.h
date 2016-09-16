@@ -31,6 +31,7 @@ public:
     void stopRoutine();
     int enqueuePacket(S3TP_PACKET * packet, uint8_t frag_no, bool more_fragments, uint8_t spi_channel, uint8_t options);
     void notifyLinkAvailability(bool available);
+    bool isQueueAvailable(uint8_t port, uint8_t no_packets);
 private:
     STATE state;
     bool active;

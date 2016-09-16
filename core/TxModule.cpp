@@ -95,6 +95,12 @@ TxModule::STATE TxModule::getCurrentState() {
     return current;
 }
 
+bool TxModule::isQueueAvailable(uint8_t port, uint8_t no_packets) {
+    PriorityQueue<S3TP_PACKET *> * queue = outBuffer->getQueue(port);
+
+    return queue->getSize() + no_packets <= MAX_QUEUE_SIZE;
+}
+
 void TxModule::notifyLinkAvailability(bool available) {
     if (available) {
         pthread_cond_signal(&tx_cond);
