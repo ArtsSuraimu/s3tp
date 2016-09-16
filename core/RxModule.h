@@ -54,6 +54,7 @@ private:
     // LinkCallback
     void handleFrame(bool arq, int channel, const void* data, int length);
     int handleReceivedPacket(S3TP_PACKET * packet);
+    virtual void handleBufferEmpty(int channel);
     void handleLinkStatus(bool linkStatus);
     bool isPortOpen(uint8_t port);
     bool isCompleteMessageForPortAvailable(int port);

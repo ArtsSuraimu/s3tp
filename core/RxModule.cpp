@@ -65,6 +65,10 @@ void RxModule::handleLinkStatus(bool linkStatus) {
     }
 }
 
+void RxModule::handleBufferEmpty(int channel) {
+    //TODO: implement
+}
+
 int RxModule::openPort(uint8_t port) {
     pthread_mutex_lock(&rx_mutex);
     if (!active) {
