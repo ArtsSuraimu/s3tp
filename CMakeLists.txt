@@ -11,8 +11,8 @@ include_directories(${TRCTRL_INCLUDE_DIRS})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 set(SOURCE_FILES
-        core/s3tp_shared.h
-        core/s3tp_shared.cpp
+        core/S3tpShared.h
+        core/S3tpShared.cpp
         core/Constants.h
         core/PriorityQueue.h
         core/CommonTypes.h
@@ -46,8 +46,8 @@ target_link_libraries(s3tp pthread)
 set(CONNECTOR_SRC_FILES
         connector/S3tpConnector.cpp
         connector/S3tpConnector.h
-        core/s3tp_shared.h
-        core/s3tp_shared.cpp
+        core/S3tpShared.h
+        core/S3tpShared.cpp
         test/connector_main.cpp
         core/Logger.h
         connector/S3tpCallback.h)

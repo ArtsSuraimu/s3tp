@@ -11,10 +11,12 @@
 #include <stdlib.h>
 #include <cstring>
 #include <unistd.h>
-#include "../core/s3tp_shared.h"
+#include "../core/S3tpShared.h"
 #include "S3tpCallback.h"
 #include <thread>
 #include <mutex>
+
+
 
 class S3tpConnector {
 public:

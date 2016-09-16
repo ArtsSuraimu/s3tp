@@ -2,7 +2,7 @@
 // Created by Lorenzo Donini on 01/09/16.
 //
 
-#include "s3tp_shared.h"
+#include "S3tpShared.h"
 
 const int LOG_LEVEL = LOG_LEVEL_DEBUG;
 
