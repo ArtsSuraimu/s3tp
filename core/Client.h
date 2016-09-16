@@ -29,6 +29,7 @@ private:
 
     void clientRoutine();
     static void * staticClientRoutine(void * args);
+    void acknowledgeMessage(uint8_t ack);
 public:
     Client(SOCKET socket, S3TP_CONFIG config, ClientInterface * listener);
     uint8_t getAppPort();

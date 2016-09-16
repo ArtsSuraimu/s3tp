@@ -102,6 +102,17 @@ int Client::send(const void * data, size_t len) {
     return CODE_SUCCESS;
 }
 
+void Client::acknowledgeMessage(uint8_t ack) {
+    ssize_t wr = write(socket, &ack, sizeof(ack));
+    if (wr == CODE_ERROR_SOCKET_NO_CONN) {
+        LOG_WARN(std::string("Connection was closed by s3tp client " + std::to_string(socket)));
+        handleConnectionClosed();
+    } else if (wr < 0) {
+        LOG_WARN(std::string("Error while writing on socket " + std::to_string(socket)));
+        closeConnection();
+    }
+}
+
 void Client::clientRoutine() {
     ssize_t i = 0, rd = 0;
     size_t len = 0;
@@ -169,7 +180,15 @@ void Client::clientRoutine() {
         int result = client_if->onApplicationMessage(message, len, this);
         //s3tp protocol copies contents of message, so we need to free this temp buffer
         delete[] message;
-        //TODO: maybe wait with deletion because tx buffer may be full
+
+        if (result != CODE_SUCCESS) {
+            LOG_INFO(std::string("Cannot transmit message to port " + std::to_string((int)app_port)
+                                 + ". Error code: " + std::to_string(result)));
+            acknowledgeMessage(MESSAGE_NACK);
+        } else {
+            acknowledgeMessage(MESSAGE_ACK);
+        }
+
         if (result < 0) {
             LOG_ERROR(std::string("Error while communicating with s3tp module " + std::to_string(socket)));
             //TODO: kill connection?!
