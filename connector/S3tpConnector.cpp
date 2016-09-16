@@ -6,13 +6,21 @@
 
 S3tpConnector::S3tpConnector() {
     connected = false;
-    pthread_mutex_init(&connector_mutex, NULL);
+}
+
+S3tpConnector::~S3tpConnector() {
+    connector_mutex.lock();
+    connected = true;
+    connector_mutex.unlock();
+    if (listener_thread.joinable()) {
+        listener_thread.join();
+    }
 }
 
 bool S3tpConnector::isConnected() {
-    pthread_mutex_lock(&connector_mutex);
+    connector_mutex.lock();
     bool result = connected;
-    pthread_mutex_unlock(&connector_mutex);
+    connector_mutex.unlock();
     return result;
 }
 
@@ -35,9 +43,9 @@ int S3tpConnector::init(S3TP_CONFIG config, S3tpCallback * callback) {
     if (connect(socketDescriptor, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
         return CODE_ERROR_SOCKET_CONNECT;
     }
-    pthread_mutex_lock(&connector_mutex);
+    connector_mutex.lock();
     connected = true;
-    pthread_mutex_unlock(&connector_mutex);
+    connector_mutex.unlock();
     LOG_INFO("Connected to S3TP Daemon successfully");
 
     //Sending configuration over to server
@@ -75,7 +83,7 @@ int S3tpConnector::init(S3TP_CONFIG config, S3tpCallback * callback) {
 
     //Starting asynchronous routine only if callback was set
     if (callback != NULL) {
-        pthread_create(&listener_thread, NULL, staticAsyncListener, this);
+        listener_thread = std::thread(&S3tpConnector::asyncListener, this);
     }
 
     return CODE_SUCCESS;
@@ -88,7 +96,6 @@ int S3tpConnector::send(const void * data, size_t len) {
     if (!isConnected()) {
         LOG_ERROR("Trying to write on closed channel. Sutting down");
 
-        pthread_mutex_unlock(&connector_mutex);
         return CODE_ERROR_SOCKET_NO_CONN;
     }
 
@@ -125,9 +132,9 @@ int S3tpConnector::recv(void * buffer, size_t len) {
 
     error = read_length_safe(socketDescriptor, &msg_len);
     if (error == CODE_ERROR_SOCKET_NO_CONN) {
-        pthread_mutex_lock(&connector_mutex);
+        connector_mutex.lock();
         connected = false;
-        pthread_mutex_unlock(&connector_mutex);
+        connector_mutex.unlock();
         LOG_WARN("Connection to S3TP was closed by server");
         return error;
     } else if (error < 0) {
@@ -147,9 +154,9 @@ int S3tpConnector::recv(void * buffer, size_t len) {
     do {
         i = read(socketDescriptor, currentPosition, (len - rd));
         if (i == 0) {
-            pthread_mutex_lock(&connector_mutex);
+            connector_mutex.lock();
             connected = false;
-            pthread_mutex_unlock(&connector_mutex);
+            connector_mutex.unlock();
             LOG_WARN("Connection to S3TP was closed by server");
             return CODE_ERROR_SOCKET_NO_CONN;
         } else if (i < 0) {
@@ -177,9 +184,9 @@ char * S3tpConnector::recvRaw(size_t * len, int * error) {
 
     *error = read_length_safe(socketDescriptor, &msg_len);
     if (*error == CODE_ERROR_SOCKET_NO_CONN) {
-        pthread_mutex_lock(&connector_mutex);
+        connector_mutex.lock();
         connected = false;
-        pthread_mutex_unlock(&connector_mutex);
+        connector_mutex.unlock();
         *len = 0;
         LOG_WARN("Connection to S3TP was closed by server");
         return NULL;
@@ -197,9 +204,9 @@ char * S3tpConnector::recvRaw(size_t * len, int * error) {
         i = read(socketDescriptor, currentPosition, (*len - rd));
         if (i == 0) {
             *error = CODE_ERROR_SOCKET_NO_CONN;
-            pthread_mutex_lock(&connector_mutex);
+            connector_mutex.lock();
             connected = false;
-            pthread_mutex_unlock(&connector_mutex);
+            connector_mutex.unlock();
             *len = 0;
             LOG_WARN("Connection to S3TP was closed by server");
             delete [] msg;
@@ -219,7 +226,7 @@ char * S3tpConnector::recvRaw(size_t * len, int * error) {
 }
 
 void S3tpConnector::closeConnection() {
-    pthread_mutex_lock(&connector_mutex);
+    std::lock_guard<std::mutex> lock(connector_mutex);
     if (connected) {
         close(socketDescriptor);
 
@@ -228,7 +235,6 @@ void S3tpConnector::closeConnection() {
         LOG_INFO(os.str());
     }
     connected = false;
-    pthread_mutex_unlock(&connector_mutex);
     //Not waiting for the client_if thread to die for now
 }
 
@@ -242,9 +248,8 @@ void S3tpConnector::asyncListener() {
     std::ostringstream os;
 
     LOG_DEBUG("Started Client async listener thread");
-    pthread_mutex_lock(&connector_mutex);
-    while (connected) {
-        pthread_mutex_unlock(&connector_mutex);
+
+    while (isConnected()) {
         err = read_length_safe(socketDescriptor, &len);
         if (err == CODE_ERROR_LENGTH_CORRUPT) {
             LOG_ERROR("Corrupt data received while connecting to S3TP daemon. Shutting down");
@@ -255,8 +260,9 @@ void S3tpConnector::asyncListener() {
             //Socket was already closed
             LOG_WARN("Connection to S3TP was closed by server");
 
-            pthread_mutex_lock(&connector_mutex);
+            connector_mutex.lock();
             connected = false;
+            connector_mutex.unlock();
             break;
         } else if (err < 0) {
             LOG_ERROR("Unknown error occurred during read phase. Shutting down");
@@ -274,9 +280,9 @@ void S3tpConnector::asyncListener() {
             i = read(socketDescriptor, currentPosition, (len - rd));
             //Checking errors
             if (i == 0) {
-                pthread_mutex_lock(&connector_mutex);
+                connector_mutex.lock();
                 connected = false;
-                pthread_mutex_unlock(&connector_mutex);
+                connector_mutex.unlock();
                 delete [] message;
 
                 LOG_WARN("Connection to S3TP was closed by server");
@@ -301,10 +307,7 @@ void S3tpConnector::asyncListener() {
         os << message << ">";
         LOG_DEBUG(os.str());
         callback->onNewMessage(message, len);
-
-        pthread_mutex_lock(&connector_mutex);
     }
-    pthread_mutex_unlock(&connector_mutex);
 }
 
 void * S3tpConnector::staticAsyncListener(void * args) {

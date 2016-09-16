@@ -13,11 +13,13 @@
 #include <unistd.h>
 #include "../core/s3tp_shared.h"
 #include "S3tpCallback.h"
-#include <pthread.h>
+#include <thread>
+#include <mutex>
 
 class S3tpConnector {
 public:
     S3tpConnector();
+    ~S3tpConnector();
     int init(S3TP_CONFIG config, S3tpCallback * callback);
     int send(const void * data, size_t len);
     char * recvRaw(size_t * len, int * error);
@@ -27,8 +29,8 @@ public:
 private:
     int socketDescriptor;
     bool connected;
-    pthread_mutex_t connector_mutex;
-    pthread_t listener_thread;
+    std::mutex connector_mutex;
+    std::thread listener_thread;
     S3TP_CONFIG config;
     S3tpCallback * callback;
 
