@@ -132,6 +132,16 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         return CODE_ERROR_CRC_INVALID;
     }
 
+    S3TP_MESSAGE_TYPE type = hdr->getMessageType();
+    if (type == S3TP_MSG_SYNC) {
+        S3TP_SYNC sync = (S3TP_SYNC&)packet->getPayload();
+        synchronizeStatus(sync);
+    } else if (type != S3TP_MSG_DATA) {
+        //Not recognized data message
+        LOG_WARN(std::string("Unrecognized message type received: " + std::to_string((int)type)));
+        return CODE_ERROR_INVALID_TYPE;
+    }
+
     if (!isPortOpen(hdr->getPort())) {
         //Dropping packet right away
         LOG_INFO(std::string("Incoming packet " + std::to_string(hdr->getGlobalSequence())
@@ -169,6 +179,18 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     //TODO: copy metadata and seq numbers into respective vars and check if something becomes available
 
     return CODE_SUCCESS;
+}
+
+void RxModule::synchronizeStatus(S3TP_SYNC& sync) {
+    to_consume_global_seq = sync.tx_global_seq;
+    //TODO: sub_seq?
+    for (int i=0; i<DEFAULT_MAX_OUT_PORTS; i++) {
+        if (sync.port_seq[i] != 0) {
+            current_port_sequence[i] = sync.port_seq[i];
+        }
+    }
+    //Notify main module
+    statusInterface->onSynchronization();
 }
 
 bool RxModule::isCompleteMessageForPortAvailable(int port) {
