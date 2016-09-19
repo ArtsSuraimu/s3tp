@@ -8,7 +8,6 @@
 TxModule::TxModule() {
     state = WAITING;
     global_seq_num = 0;
-    to_consume_global_seq = 0;
     scheduled_sync = true;
     pthread_mutex_init(&tx_mutex, NULL);
     pthread_cond_init(&tx_cond, NULL);
@@ -29,7 +28,6 @@ TxModule::~TxModule() {
 void TxModule::reset() {
     pthread_mutex_lock(&tx_mutex);
     global_seq_num = 0;
-    to_consume_global_seq = 0;
     port_sequence.clear();
     to_consume_port_seq.clear();
     outBuffer->clear();
@@ -39,8 +37,7 @@ void TxModule::reset() {
 void TxModule::synchronizeStatus() {
     //Not locking, as the method should only be called from a synchronized code block
     std::fill(syncStructure.port_seq, syncStructure.port_seq + DEFAULT_MAX_OUT_PORTS, 0);
-    syncStructure.tx_global_seq = to_consume_global_seq;
-    syncStructure.tx_sub_seq = to_consume_sub_seq;
+    syncStructure.tx_global_seq = global_seq_num;
     for (std::map<uint8_t, uint8_t>::iterator it = port_sequence.begin(); it != port_sequence.end(); ++it) {
         syncStructure.port_seq[it->first] = it->second;
     }
@@ -81,13 +78,28 @@ void TxModule::txRoutine() {
             continue;
         }
         state = RUNNING;
-        S3TP_PACKET * packet = outBuffer->getNextAvailablePacket();
+
+        /*
+         * As buffer only returns ordered packets per queue, we cannot split up fragmented messages
+         * by randomly accessing different queues. This would mess up the global sequence number.
+         * Instead, if we are transmitting a fragmented message, we prioritize the queue
+         * which holds that message.
+         */
+        S3TP_PACKET * packet = (sendingFragments) ?
+                               outBuffer->getNextPacket(currentPort) :
+                               outBuffer->getNextAvailablePacket();
         if (packet == NULL) {
             continue;
         }
         pthread_mutex_unlock(&tx_mutex);
         S3TP_HEADER * hdr = packet->getHeader();
-        to_consume_global_seq = hdr->getGlobalSequence() + (uint8_t)1;
+        currentPort = hdr->getPort();
+        sendingFragments = hdr->moreFragments();
+
+        hdr->setGlobalSequence(global_seq_num);
+        if (!hdr->moreFragments()) {
+            global_seq_num++;
+        }
         to_consume_port_seq[hdr->getPort()]++;
 
         LOG_DEBUG(std::string("TX: Packet sent from port " + std::to_string((int)hdr->getPort())
@@ -178,7 +190,7 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
     }
     S3TP_HEADER * hdr = packet->getHeader();
     hdr->setMessageType(S3TP_MSG_DATA);
-    hdr->setGlobalSequence(global_seq_num);
+    //Not setting global seq, as it will be set by transmission thread, when actually sending the packet to L2
     hdr->setSubSequence(frag_no);
     if (more_fragments) {
         hdr->setMoreFragments();
@@ -205,19 +217,7 @@ int TxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     int comp = 0;
     uint8_t seq1, seq2, offset;
     pthread_mutex_lock(&tx_mutex);
-    offset = to_consume_global_seq;
-    //First check global seq number for comparison
-    seq1 = element1->getHeader()->getGlobalSequence() - offset;
-    seq2 = element2->getHeader()->getGlobalSequence() - offset;
-    if (seq1 < seq2) {
-        comp = -1; //Element 1 is lower, hence has higher priority
-    } else if (seq1 > seq2) {
-        comp = 1; //Element 2 is lower, hence has higher priority
-    }
-    if (comp != 0) {
-        pthread_mutex_unlock(&tx_mutex);
-        return comp;
-    }
+
     offset = to_consume_port_seq[element1->getHeader()->getPort()];
     seq1 = element1->getHeader()->seq_port - offset;
     seq2 = element2->getHeader()->seq_port - offset;

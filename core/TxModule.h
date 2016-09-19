@@ -40,9 +40,9 @@ private:
     pthread_t tx_thread;
     pthread_mutex_t tx_mutex;
     pthread_cond_t tx_cond;
+    bool sendingFragments;
+    uint8_t currentPort;
     uint8_t global_seq_num;
-    uint8_t to_consume_global_seq;
-    uint8_t to_consume_sub_seq;
     Transceiver::LinkInterface * linkInterface;
     bool scheduled_sync;
     S3TP_SYNC syncStructure;
