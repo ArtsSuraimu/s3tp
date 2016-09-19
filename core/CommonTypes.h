@@ -11,7 +11,11 @@
 #include <stdlib.h>
 #include "Constants.h"
 
+#define S3TP_MSG_DATA 0x00
+#define S3TP_MSG_SYNC 0x03
+
 typedef int SOCKET;
+typedef uint8_t S3TP_MSG_TYPE;
 
 #pragma pack(push, 1)
 /**
@@ -91,11 +95,11 @@ typedef struct tag_s3tp_header
         pdu_length = (uint16_t)((pdu_length & 0x4000) | pdu_len);
     }
 
-	uint8_t getMessageType() {
+	S3TP_MSG_TYPE getMessageType() {
 		return (uint8_t)(pdu_length >> 14);
 	}
 
-	void setMessageType(uint8_t type) {
+	void setMessageType(S3TP_MSG_TYPE type) {
         pdu_length = (uint16_t )((pdu_length & 0x3FFF) | (type << 14));
 	}
 }S3TP_HEADER;
@@ -140,9 +144,9 @@ struct S3TP_PACKET{
 };
 
 struct S3TP_SYNC {
-	uint8_t tx_global_seq;
-	uint8_t tx_sub_seq;
-	uint8_t port_seq [DEFAULT_MAX_OUT_PORTS];
+	uint8_t tx_global_seq = 0;
+	uint8_t tx_sub_seq = 0;
+	uint8_t port_seq [DEFAULT_MAX_OUT_PORTS] = {0};
 };
 
 #pragma pack(pop)
