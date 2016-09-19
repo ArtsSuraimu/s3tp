@@ -17,6 +17,7 @@ public:
     PriorityQueue<S3TP_PACKET *> * getQueue(int port);
     S3TP_PACKET * getNextPacket(int port);
     S3TP_PACKET * getNextAvailablePacket();
+    void clear();
 
 private:
     PriorityComparator<S3TP_PACKET *> * comparator;

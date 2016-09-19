@@ -12,6 +12,11 @@ Buffer::Buffer(PriorityComparator<S3TP_PACKET*> * comparator) {
 
 //Dtor
 Buffer::~Buffer() {
+    clear();
+    pthread_mutex_destroy(&buffer_mutex);
+}
+
+void Buffer::clear() {
     pthread_mutex_lock(&buffer_mutex);
     for (std::map<int, PriorityQueue<S3TP_PACKET*> *>::iterator it = queues.begin(); it != queues.end(); ++it) {
         delete it->second;
@@ -19,7 +24,6 @@ Buffer::~Buffer() {
     queues.clear();
     packet_counter.clear();
     pthread_mutex_unlock(&buffer_mutex);
-    pthread_mutex_destroy(&buffer_mutex);
 }
 
 bool Buffer::packetsAvailable() {
