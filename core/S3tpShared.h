@@ -48,6 +48,13 @@
 #define MESSAGE_ACK 0x00
 #define MESSAGE_NACK 0xFF
 
+/*
+ * Definition of message type
+ */
+#define DATA_MESSAGE 0x00
+#define CONTROL_MESSAGE 0xFF
+
+
 #define SAFE_TRANSMISSION_COUNT 3
 
 #include "../core/Logger.h"
@@ -69,6 +76,15 @@ typedef struct tag_s3tp_config {
     }
 }S3TP_CONFIG;
 
+typedef uint8_t S3TP_MESSAGE_TYPE;
+typedef uint8_t ACKNOWLEDGEMENT;
+typedef uint8_t S3TP_ERROR;
+
+typedef struct tag_s3tp_control {
+    ACKNOWLEDGEMENT ack;
+    S3TP_ERROR error;
+}S3TP_CONTROL;
+
 typedef struct tag_s3tp_length_redundant {
     size_t command[SAFE_TRANSMISSION_COUNT];
 }S3TP_INTRO_REDUNDANT;
@@ -83,5 +99,6 @@ extern char * socket_path;
 
 int read_length_safe(int fd, size_t * out_length);
 int write_length_safe(int fd, size_t len);
+uint8_t safe_bool_interpretation(uint8_t val);
 
 #endif //S3TP_S3TP_SHARED_H

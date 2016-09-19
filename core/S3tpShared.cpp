@@ -59,3 +59,11 @@ int write_length_safe(int fd, size_t len) {
     }
     return CODE_SUCCESS;
 }
+
+uint8_t safe_bool_interpretation(uint8_t val) {
+    if (val == 0x7F || val > 0x80) {
+        return 0xFF;
+    } else {
+        return 0x00;
+    }
+}
