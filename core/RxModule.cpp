@@ -24,6 +24,17 @@ RxModule::~RxModule() {
     //TODO: implement. Also remember to close all ports
 }
 
+void RxModule::reset() {
+    pthread_mutex_lock(&rx_mutex);
+    received_packets = 0;
+    to_consume_global_seq = 0;
+    inBuffer->clear();
+    current_port_sequence.clear();
+    available_messages.clear();
+    open_ports.clear();
+    pthread_mutex_unlock(&rx_mutex);
+}
+
 void RxModule::startModule(StatusInterface * statusInterface) {
     received_packets = 0;
     active = true;
