@@ -32,6 +32,7 @@
 #define CODE_ERROR_SOCKET_READ -7
 #define CODE_ERROR_LENGTH_CORRUPT -8
 #define CODE_ERROR_INVALID_LENGTH -9
+#define CODE_ERROR_INVALID_TYPE -10
 #define CODE_SUCCESS 0
 
 /*
@@ -45,14 +46,14 @@
 /*
  * Definition of ack/nack bytes, sent from server to client
  */
-#define MESSAGE_ACK 0x00
-#define MESSAGE_NACK 0xFF
+#define APP_MESSAGE_ACK 0x00
+#define APP_MESSAGE_NACK 0xFF
 
 /*
  * Definition of message type
  */
-#define DATA_MESSAGE 0x00
-#define CONTROL_MESSAGE 0xFF
+#define APP_DATA_MESSAGE 0x00
+#define APP_CONTROL_MESSAGE 0xFF
 
 
 #define SAFE_TRANSMISSION_COUNT 3

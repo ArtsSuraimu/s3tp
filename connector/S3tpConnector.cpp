@@ -91,7 +91,7 @@ int S3tpConnector::init(S3TP_CONFIG config, S3tpCallback * callback) {
 int S3tpConnector::send(const void * data, size_t len) {
     ssize_t wr;
     int error = 0;
-    S3TP_MESSAGE_TYPE type = DATA_MESSAGE;
+    S3TP_MESSAGE_TYPE type = APP_DATA_MESSAGE;
 
     if (!isConnected()) {
         LOG_ERROR("Trying to write on closed channel. Sutting down");
@@ -278,15 +278,15 @@ void S3tpConnector::asyncListener() {
             break;
         }
         type = safe_bool_interpretation(type);
-        if (type == CONTROL_MESSAGE) {
+        if (type == APP_CONTROL_MESSAGE) {
             if (!receiveControlMessage(control)) {
                 break;
             }
             connector_mutex.lock();
-            lastMessageAck = safe_bool_interpretation(control.ack) == MESSAGE_ACK;
+            lastMessageAck = safe_bool_interpretation(control.ack) == APP_MESSAGE_ACK;
             connector_mutex.unlock();
             ack_cond.notify_all();
-        } else if (type == DATA_MESSAGE) {
+        } else if (type == APP_DATA_MESSAGE) {
             if (!receiveDataMessage()) {
                 break;
             }
