@@ -118,16 +118,14 @@ int S3TP::sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len
 
 int S3TP::sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
     S3TP_PACKET * packet;
-    int status = 0;
 
     //Send to Tx Module without fragmenting
     packet = new S3TP_PACKET((char *)data, (uint16_t) len);
     packet->channel = channel;
     packet->options = opts;
     packet->getHeader()->setPort(port);
-    status = tx.enqueuePacket(packet, 0, false, channel, opts);
 
-    return status;
+    return tx.enqueuePacket(packet, 0, false, channel, opts);
 }
 
 int S3TP::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
@@ -135,7 +133,7 @@ int S3TP::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len
 
     //Need to fragment
     int written = 0;
-    int status = 0;
+    int status = CODE_SUCCESS;
     uint8_t fragment = 0;
     bool moreFragments = true;
     char * dataPtr = (char *) data;
@@ -165,7 +163,8 @@ int S3TP::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len
         //Increasing current fragment number for next iteration
         fragment++;
     }
-    return written;
+
+    return status;
 }
 
 /*
@@ -227,7 +226,7 @@ int S3TP::checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t 
         no_packets += 1;
     }
     //Checking if transmission Q can contain the desired amount of packets
-    if (tx.isQueueAvailable(port, no_packets)) {
+    if (!tx.isQueueAvailable(port, no_packets)) {
         return CODE_QUEUE_FULL;
     } else if (channel_blacklist.find(channel) != channel_blacklist.end()) {
         //Channel is currently broken
