@@ -9,6 +9,7 @@ TxModule::TxModule() {
     state = WAITING;
     global_seq_num = 0;
     to_consume_global_seq = 0;
+    scheduled_sync = true;
     pthread_mutex_init(&tx_mutex, NULL);
     pthread_cond_init(&tx_cond, NULL);
     outBuffer = new Buffer(this);
@@ -35,6 +36,31 @@ void TxModule::reset() {
     pthread_mutex_unlock(&tx_mutex);
 }
 
+void TxModule::synchronizeStatus() {
+    //Not locking, as the method should only be called from a synchronized code block
+    std::fill(syncStructure.port_seq, syncStructure.port_seq + DEFAULT_MAX_OUT_PORTS, 0);
+    syncStructure.tx_global_seq = to_consume_global_seq;
+    syncStructure.tx_sub_seq = to_consume_sub_seq;
+    for (std::map<uint8_t, uint8_t>::iterator it = port_sequence.begin(); it != port_sequence.end(); ++it) {
+        syncStructure.port_seq[it->first] = it->second;
+    }
+    S3TP_PACKET * packet = new S3TP_PACKET((char *)&syncStructure, sizeof(syncStructure));
+    packet->channel = 0; //TODO: need some optimal channel (dynamically)
+    S3TP_HEADER * header = packet->getHeader();
+    header->setMessageType(S3TP_MSG_SYNC);
+    header->setPort(0);
+    header->setGlobalSequence(0);
+    header->setSubSequence(0);
+    header->unsetMoreFragments();
+    header->seq_port = 0;
+    uint16_t crc = calc_checksum(packet->getPayload(), header->getPduLength());
+    header->crc = crc;
+
+    bool arq = S3TP_ARQ;
+    LOG_DEBUG("TX: Sync Packet sent to receiver");
+    linkInterface->sendFrame(arq, packet->channel, packet->packet, packet->getLength());
+}
+
 //Private methods
 void TxModule::txRoutine() {
     pthread_mutex_lock(&tx_mutex);
@@ -43,6 +69,10 @@ void TxModule::txRoutine() {
             state = BLOCKED;
             pthread_cond_wait(&tx_cond, &tx_mutex);
             continue;
+        }
+        //Sync has priority over any other packet
+        if (scheduled_sync) {
+            synchronizeStatus();
         }
         if(!outBuffer->packetsAvailable()) {
             state = WAITING;
@@ -140,6 +170,7 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
         return CODE_INACTIVE_ERROR;
     }
     S3TP_HEADER * hdr = packet->getHeader();
+    hdr->setMessageType(S3TP_MSG_DATA);
     hdr->setGlobalSequence(global_seq_num);
     hdr->setSubSequence(frag_no);
     if (more_fragments) {
