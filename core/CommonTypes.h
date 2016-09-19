@@ -14,6 +14,20 @@
 typedef int SOCKET;
 
 #pragma pack(push, 1)
+/**
+ * Structure containing the header of an s3tp packet.
+ * Each header is 8 bytes long and is setup as follows:
+ *
+ * 				16 bits				8 bits		8 bits
+ * ------------------------------------------------------
+ * 				CRC				|  GLOB_SEQ  |  SUB_SEQ
+ * ------------------------------------------------------
+ * 			PDU LENGTH			|  PORT_SEQ  |   PORT
+ * ------------------------------------------------------
+ *
+ * Additionally, the last 2 bits of PDU_LENGTH are reserved to the protocol,
+ * whilte the last bit of PORT contains the fragmentation bit.
+ */
 typedef struct tag_s3tp_header
 {
 	uint16_t crc;
@@ -95,7 +109,7 @@ typedef struct tag_s3tp_header
  */
 struct S3TP_PACKET{
 	char * packet;
-	uint8_t channel;
+	uint8_t channel;  /* Logical Channel to be used on the SPI interface */
 	uint8_t options;
 
 	S3TP_PACKET(const char * pdu, uint16_t pduLen) {
@@ -125,18 +139,12 @@ struct S3TP_PACKET{
 	}
 };
 
-/*typedef struct tag_s3tp_PACKET {
-	S3TP_HEADER hdr;
-	char pdu[LEN_S3TP_PDU];
-}S3TP_PACKET;*/
+struct S3TP_SYNC {
+	uint8_t tx_global_seq;
+	uint8_t tx_sub_seq;
+	uint8_t port_seq [DEFAULT_MAX_OUT_PORTS];
+};
 
 #pragma pack(pop)
-
-typedef struct tag_queue_data
-{
-	S3TP_PACKET * pkt;
-	uint8_t channel;			/* Logical Channel to be used on the SPI interface */
-	uint8_t options;
-}S3TP_PACKET_WRAPPER;
 
 #endif /* CORE_S3TP_TYPES_H_ */
