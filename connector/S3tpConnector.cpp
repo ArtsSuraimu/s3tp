@@ -91,7 +91,7 @@ int S3tpConnector::init(S3TP_CONFIG config, S3tpCallback * callback) {
 int S3tpConnector::send(const void * data, size_t len) {
     ssize_t wr;
     int error = 0;
-    bool ack;
+    S3TP_MESSAGE_TYPE type = DATA_MESSAGE;
 
     if (!isConnected()) {
         LOG_ERROR("Trying to write on closed channel. Sutting down");
@@ -99,6 +99,15 @@ int S3tpConnector::send(const void * data, size_t len) {
         return CODE_ERROR_SOCKET_NO_CONN;
     }
 
+    //Send message type first
+    wr = write(socketDescriptor, &type, sizeof(type));
+    if (wr <= 0) {
+        LOG_WARN("Error while writing to S3TP socket");
+
+        return CODE_ERROR_SOCKET_WRITE;
+    }
+
+    //Send message lengths
     error = write_length_safe(socketDescriptor, len);
     if (error == CODE_ERROR_SOCKET_WRITE) {
         LOG_WARN("Error while writing on S3TP socket");
@@ -106,6 +115,7 @@ int S3tpConnector::send(const void * data, size_t len) {
         return error;
     }
 
+    std::unique_lock<std::mutex> lock(connector_mutex);
     wr = write(socketDescriptor, data, len);
     if (wr <= 0) {
         LOG_WARN("Error while writing to S3TP socket");
@@ -115,12 +125,14 @@ int S3tpConnector::send(const void * data, size_t len) {
 
     LOG_DEBUG(std::string("Written " + std::to_string(wr) + " bytes to S3TP"));
 
-    if (!acknowledgeMessage()) {
+    ack_cond.wait(lock);
+    if (!lastMessageAck) {
         return CODE_SERVER_QUEUE_FULL;
     }
     return (int)wr;
 }
 
+//TODO: update recv logic!!
 int S3tpConnector::recv(void * buffer, size_t len) {
     int error = 0;
     size_t msg_len;
@@ -173,6 +185,7 @@ int S3tpConnector::recv(void * buffer, size_t len) {
     return (int)rd;
 }
 
+//TODO: update recvRaw logic
 char * S3tpConnector::recvRaw(size_t * len, int * error) {
     size_t msg_len = 0;
     ssize_t rd, i;
@@ -242,20 +255,15 @@ void S3tpConnector::closeConnection() {
  * Asynchronous thread routine
  */
 void S3tpConnector::asyncListener() {
-    int err = 0;
-    ssize_t i, rd;
-    size_t len;
+    ssize_t rd;
+    S3TP_MESSAGE_TYPE type;
+    S3TP_CONTROL control;
 
     LOG_DEBUG("Started Client async listener thread");
 
     while (isConnected()) {
-        err = read_length_safe(socketDescriptor, &len);
-        if (err == CODE_ERROR_LENGTH_CORRUPT) {
-            LOG_ERROR("Corrupt data received while connecting to S3TP daemon. Shutting down");
-
-            closeConnection();
-            break;
-        } else if (err == CODE_ERROR_SOCKET_NO_CONN) {
+        rd = read(socketDescriptor, &type, sizeof(S3TP_MESSAGE_TYPE));
+        if (rd == CODE_ERROR_SOCKET_NO_CONN) {
             //Socket was already closed
             LOG_WARN("Connection to S3TP was closed by server");
 
@@ -263,56 +271,33 @@ void S3tpConnector::asyncListener() {
             connected = false;
             connector_mutex.unlock();
             break;
-        } else if (err < 0) {
+        } else if (rd < 0) {
             LOG_ERROR("Unknown error occurred during read phase. Shutting down");
 
             closeConnection();
             break;
         }
-        //Length of next message received
-        char * message = new char[len+1];
-        char * currentPosition = message;
-
-        //Read payload
-        rd = 0;
-        do {
-            i = read(socketDescriptor, currentPosition, (len - rd));
-            //Checking errors
-            if (i == 0) {
-                connector_mutex.lock();
-                connected = false;
-                connector_mutex.unlock();
-                delete [] message;
-
-                LOG_WARN("Connection to S3TP was closed by server");
-
-                return;
-            } else if (i < 0) {
-
-                LOG_WARN("Error while reading from S3TP socket");
-                closeConnection();
-                delete [] message;
-                return;
+        type = safe_bool_interpretation(type);
+        if (type == CONTROL_MESSAGE) {
+            if (!receiveControlMessage(control)) {
+                break;
             }
-            rd += i;
-            currentPosition += i;
-        } while(rd < len);
-
-        //Payload received entirely
-        message[len] = '\0';
-
-        LOG_DEBUG(std::string("Received data (" + std::to_string(len)
-                              + " bytes) on port " + std::to_string((int)config.port)
-                              + ": <" + message + ">"));
-        callback->onNewMessage(message, len);
+            connector_mutex.lock();
+            lastMessageAck = safe_bool_interpretation(control.ack) == MESSAGE_ACK;
+            connector_mutex.unlock();
+            ack_cond.notify_all();
+        } else if (type == DATA_MESSAGE) {
+            if (!receiveDataMessage()) {
+                break;
+            }
+        }
     }
 }
 
-bool S3tpConnector::acknowledgeMessage() {
+bool S3tpConnector::receiveControlMessage(S3TP_CONTROL& control) {
     ssize_t rd;
-    uint8_t ack;
 
-    rd = read(socketDescriptor, &ack, sizeof(uint8_t));
+    rd = read(socketDescriptor, &control, sizeof(S3TP_CONTROL));
 
     //Handle socket errors
     if (rd == CODE_ERROR_SOCKET_NO_CONN) {
@@ -325,13 +310,70 @@ bool S3tpConnector::acknowledgeMessage() {
         closeConnection();
         return false;
     }
+    return true;
+}
 
-    //Checking ack byte. There might have been a single bit flip, so we check the value range
-    if (ack == 0x80 || ack < 0x7F) {
-        //Was supposed to be 0x00
+bool S3tpConnector::receiveDataMessage() {
+    int err = 0;
+    ssize_t i, rd;
+    size_t len;
+
+    err = read_length_safe(socketDescriptor, &len);
+    if (err == CODE_ERROR_LENGTH_CORRUPT) {
+        LOG_ERROR("Corrupt data received while connecting to S3TP daemon. Shutting down");
+
+        closeConnection();
         return false;
-    } else {
-        //Ack == 0x7F or ack == 0x80 -> Was supposed to be 0xFF
-        return true;
+    } else if (err == CODE_ERROR_SOCKET_NO_CONN) {
+        //Socket was already closed
+        LOG_WARN("Connection to S3TP was closed by server");
+
+        connector_mutex.lock();
+        connected = false;
+        connector_mutex.unlock();
+        return false;
+    } else if (err < 0) {
+        LOG_ERROR("Unknown error occurred during read phase. Shutting down");
+
+        closeConnection();
+        return false;
     }
+    //Length of next message received
+    char * message = new char[len+1];
+    char * currentPosition = message;
+
+    //Read payload
+    rd = 0;
+    do {
+        i = read(socketDescriptor, currentPosition, (len - rd));
+        //Checking errors
+        if (i == 0) {
+            connector_mutex.lock();
+            connected = false;
+            connector_mutex.unlock();
+            delete [] message;
+
+            LOG_WARN("Connection to S3TP was closed by server");
+
+            return false;
+        } else if (i < 0) {
+
+            LOG_WARN("Error while reading from S3TP socket");
+            closeConnection();
+            delete [] message;
+            return false;
+        }
+        rd += i;
+        currentPosition += i;
+    } while(rd < len);
+
+    //Payload received entirely
+    message[len] = '\0';
+
+    LOG_DEBUG(std::string("Received data (" + std::to_string(len)
+                          + " bytes) on port " + std::to_string((int)config.port)
+                          + ": <" + message + ">"));
+    callback->onNewMessage(message, len);
+
+    return true;
 }

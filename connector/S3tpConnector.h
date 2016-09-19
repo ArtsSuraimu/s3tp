@@ -15,6 +15,7 @@
 #include "S3tpCallback.h"
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 
 class S3tpConnector {
 public:
@@ -29,13 +30,16 @@ public:
 private:
     int socketDescriptor;
     bool connected;
+    bool lastMessageAck;
     std::mutex connector_mutex;
     std::thread listener_thread;
+    std::condition_variable ack_cond;
     S3TP_CONFIG config;
     S3tpCallback * callback;
 
     void asyncListener();
-    bool acknowledgeMessage();
+    bool receiveControlMessage(S3TP_CONTROL& control);
+    bool receiveDataMessage();
 };
 
 #endif //S3TP_S3TP_CONNECTOR_H
