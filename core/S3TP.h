@@ -51,6 +51,7 @@ private:
     pthread_cond_t assembly_cond;
     pthread_mutex_t s3tp_mutex;
     bool active;
+    bool syncScheduled;
     Transceiver::Backend * transceiver;
 
     //Generic methods
@@ -78,6 +79,7 @@ private:
     //Status check
     virtual void onLinkStatusChanged(bool active);
     virtual void onError(int error, void * params);
+    virtual void onSynchronization();
 };
 
 

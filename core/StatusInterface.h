@@ -9,6 +9,7 @@ class StatusInterface {
 public:
     virtual void onLinkStatusChanged(bool active) = 0;
     virtual void onError(int error, void * params) = 0;
+    virtual void onSynchronization() = 0;
 };
 
 #endif //S3TP_LINKSTATUSINTERFACE_H

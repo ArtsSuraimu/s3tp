@@ -36,8 +36,8 @@ void S3TP::reset() {
     pthread_mutex_lock(&s3tp_mutex);
     rx.reset();
     tx.reset();
-    synchronizeStatus();
     pthread_mutex_unlock(&s3tp_mutex);
+    synchronizeStatus();
 }
 
 int S3TP::init(TRANSCEIVER_CONFIG * config) {
@@ -83,7 +83,10 @@ int S3TP::stop() {
 }
 
 void S3TP::synchronizeStatus() {
-
+    pthread_mutex_lock(&s3tp_mutex);
+    syncScheduled = true;
+    tx.scheduleSync();
+    pthread_mutex_unlock(&s3tp_mutex);
 }
 
 Client * S3TP::getClientConnectedToPort(uint8_t port) {
@@ -285,4 +288,17 @@ void S3TP::onLinkStatusChanged(bool active) {
 
 void S3TP::onError(int error, void * params) {
     //TODO: implement
+}
+
+void S3TP::onSynchronization() {
+    pthread_mutex_lock(&s3tp_mutex);
+    if (syncScheduled) {
+        //Not going to sync forever. After first sync we set the sync off
+        syncScheduled = false;
+    } else {
+        //Didn't receive any previous sync request (and sync wasn't self-initiated),
+        // so we respond with another sync
+        synchronizeStatus();
+    }
+    pthread_mutex_unlock(&s3tp_mutex);
 }
