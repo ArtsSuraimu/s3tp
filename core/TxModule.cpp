@@ -18,9 +18,21 @@ TxModule::TxModule() {
 //Dtor
 TxModule::~TxModule() {
     pthread_mutex_lock(&tx_mutex);
+    state = WAITING;
+    delete outBuffer;
     pthread_mutex_unlock(&tx_mutex);
     pthread_mutex_destroy(&tx_mutex);
     LOG_DEBUG("Destroyed Tx Module");
+}
+
+void TxModule::reset() {
+    pthread_mutex_lock(&tx_mutex);
+    global_seq_num = 0;
+    to_consume_global_seq = 0;
+    port_sequence.clear();
+    to_consume_port_seq.clear();
+    outBuffer->clear();
+    pthread_mutex_unlock(&tx_mutex);
 }
 
 //Private methods
