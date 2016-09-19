@@ -33,7 +33,7 @@ public:
     void notifyLinkAvailability(bool available);
     bool isQueueAvailable(uint8_t port, uint8_t no_packets);
     void reset();
-    void synchronizeStatus();
+    void scheduleSync();
 private:
     STATE state;
     bool active;
@@ -53,6 +53,7 @@ private:
 
     void txRoutine();
     static void * staticTxRoutine(void * args);
+    void synchronizeStatus();
     virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
 };
 

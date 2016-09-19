@@ -73,6 +73,7 @@ void TxModule::txRoutine() {
         //Sync has priority over any other packet
         if (scheduled_sync) {
             synchronizeStatus();
+            scheduled_sync = false;
         }
         if(!outBuffer->packetsAvailable()) {
             state = WAITING;
@@ -103,6 +104,12 @@ void TxModule::txRoutine() {
     pthread_mutex_unlock(&tx_mutex);
 
     pthread_exit(NULL);
+}
+
+void TxModule::scheduleSync() {
+    pthread_mutex_lock(&tx_mutex);
+    scheduled_sync = true;
+    pthread_mutex_unlock(&tx_mutex);
 }
 
 void * TxModule::staticTxRoutine(void * args) {
