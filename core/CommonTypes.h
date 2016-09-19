@@ -145,7 +145,6 @@ struct S3TP_PACKET{
 
 struct S3TP_SYNC {
 	uint8_t tx_global_seq = 0;
-	uint8_t tx_sub_seq = 0;
 	uint8_t port_seq [DEFAULT_MAX_OUT_PORTS] = {0};
 };
 
