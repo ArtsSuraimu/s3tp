@@ -5,6 +5,9 @@
 #include "S3TP.h"
 
 S3TP::S3TP() {
+    pthread_mutex_init(&clients_mutex, NULL);
+    pthread_mutex_init(&s3tp_mutex, NULL);
+    reset();
 }
 
 S3TP::~S3TP() {
@@ -29,9 +32,15 @@ S3TP::~S3TP() {
     pthread_mutex_destroy(&s3tp_mutex);
 }
 
+void S3TP::reset() {
+    pthread_mutex_lock(&s3tp_mutex);
+    rx.reset();
+    tx.reset();
+    synchronizeStatus();
+    pthread_mutex_unlock(&s3tp_mutex);
+}
+
 int S3TP::init(TRANSCEIVER_CONFIG * config) {
-    pthread_mutex_init(&clients_mutex, NULL);
-    pthread_mutex_init(&s3tp_mutex, NULL);
     pthread_mutex_lock(&s3tp_mutex);
     active = true;
 
@@ -71,6 +80,10 @@ int S3TP::stop() {
     pthread_mutex_unlock(&s3tp_mutex);
 
     return CODE_SUCCESS;
+}
+
+void S3TP::synchronizeStatus() {
+
 }
 
 Client * S3TP::getClientConnectedToPort(uint8_t port) {

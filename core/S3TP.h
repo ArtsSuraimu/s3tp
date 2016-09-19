@@ -53,6 +53,10 @@ private:
     bool active;
     Transceiver::Backend * transceiver;
 
+    //Generic methods
+    void reset();
+    void synchronizeStatus();
+
     //TxModule
     TxModule tx;
     int fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts);
