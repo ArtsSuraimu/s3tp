@@ -77,7 +77,21 @@ void Client::kill() {
 }
 
 int Client::send(const void * data, size_t len) {
-    //Sending length of message first
+    ssize_t wr;
+    S3TP_MESSAGE_TYPE type = DATA_MESSAGE;
+
+    //Sending message type first
+    wr = write(socket, &type, sizeof(type));
+    if (wr == CODE_ERROR_SOCKET_NO_CONN) {
+        LOG_WARN(std::string("Connection was closed by s3tp client " + std::to_string(socket)));
+        handleConnectionClosed();
+        return CODE_ERROR_SOCKET_NO_CONN;
+    } else if (wr < 0) {
+        LOG_WARN(std::string("Error while writing on socket " + std::to_string(socket)));
+        closeConnection();
+        return CODE_ERROR_SOCKET_WRITE;
+    }
+    //Sending length of message
     int error = write_length_safe(socket, len);
     if (error == CODE_ERROR_SOCKET_NO_CONN) {
         LOG_WARN(std::string("Connection was closed by s3tp client " + std::to_string(socket)));
@@ -89,7 +103,7 @@ int Client::send(const void * data, size_t len) {
         return error;
     }
     //Sending message content
-    ssize_t wr = write(socket, data, len);
+    wr = write(socket, data, len);
     if (wr == 0) {
         LOG_WARN(std::string("Connection was closed by s3tp client " + std::to_string(socket)));
         handleConnectionClosed();
@@ -102,8 +116,18 @@ int Client::send(const void * data, size_t len) {
     return CODE_SUCCESS;
 }
 
-void Client::acknowledgeMessage(uint8_t ack) {
-    ssize_t wr = write(socket, &ack, sizeof(ack));
+void Client::acknowledgeMessage(S3TP_CONTROL ack) {
+    S3TP_MESSAGE_TYPE type = CONTROL_MESSAGE;
+    ssize_t wr = write(socket, &type, sizeof(type));
+    if (wr == CODE_ERROR_SOCKET_NO_CONN) {
+        LOG_WARN(std::string("Connection was closed by s3tp client " + std::to_string(socket)));
+        handleConnectionClosed();
+    } else if (wr < 0) {
+        LOG_WARN(std::string("Error while writing on socket " + std::to_string(socket)));
+        closeConnection();
+    }
+
+    wr = write(socket, &ack, sizeof(ack));
     if (wr == CODE_ERROR_SOCKET_NO_CONN) {
         LOG_WARN(std::string("Connection was closed by s3tp client " + std::to_string(socket)));
         handleConnectionClosed();
@@ -117,9 +141,19 @@ void Client::clientRoutine() {
     ssize_t i = 0, rd = 0;
     size_t len = 0;
     int error = 0;
+    S3TP_MESSAGE_TYPE type;
+    S3TP_CONTROL control;
 
     LOG_DEBUG(std::string("Started client thread for socket " + std::to_string(socket)));
     while (isConnected()) {
+        //Checking message type first
+        rd = read(socket, &type, sizeof(type));
+        if (rd == CODE_ERROR_SOCKET_NO_CONN) {
+            LOG_INFO(std::string("Client closed socket " + std::to_string(socket)));
+            handleConnectionClosed();
+            break;
+        }
+        //TODO: handle logic for reading control messages
         error = read_length_safe(socket, &len);
         if (error == CODE_ERROR_SOCKET_NO_CONN) {
             LOG_INFO(std::string("Client closed socket " + std::to_string(socket)));
@@ -168,7 +202,7 @@ void Client::clientRoutine() {
         LOG_DEBUG(std::string("Received "
                               + std::to_string(len)
                               + " bytes from port "
-                              + std::to_string(app_port)
+                              + std::to_string((int)app_port)
                               + ": <" + message + ">"));
         if (client_if == NULL) {
             LOG_WARN(std::string("Client interface is not connected. Aborting client "
@@ -184,9 +218,14 @@ void Client::clientRoutine() {
         if (result != CODE_SUCCESS) {
             LOG_INFO(std::string("Cannot transmit message to port " + std::to_string((int)app_port)
                                  + ". Error code: " + std::to_string(result)));
-            acknowledgeMessage(MESSAGE_NACK);
+            control.ack = MESSAGE_NACK;
+            control.error = (S3TP_ERROR) result;
+            acknowledgeMessage(control);
         } else {
-            acknowledgeMessage(MESSAGE_ACK);
+            LOG_DEBUG(std::string("Sending ack to port " + std::to_string((int)app_port)));
+            control.ack = MESSAGE_ACK;
+            control.error = 0;
+            acknowledgeMessage(control);
         }
 
         if (result < 0) {
