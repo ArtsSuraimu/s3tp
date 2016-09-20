@@ -9,9 +9,8 @@ S3tpConnector::S3tpConnector() {
 }
 
 S3tpConnector::~S3tpConnector() {
-    connector_mutex.lock();
-    connected = true;
-    connector_mutex.unlock();
+    closeConnection();
+
     if (listener_thread.joinable()) {
         listener_thread.join();
     }
@@ -127,8 +126,10 @@ int S3tpConnector::send(const void * data, size_t len) {
 
     ack_cond.wait(lock);
     if (!lastMessageAck) {
+        LOG_DEBUG("Received NACK from S3TP");
         return CODE_SERVER_QUEUE_FULL;
     }
+    LOG_DEBUG("Received ACK from S3TP");
     return (int)wr;
 }
 
@@ -241,14 +242,15 @@ char * S3tpConnector::recvRaw(size_t * len, int * error) {
 }
 
 void S3tpConnector::closeConnection() {
-    std::lock_guard<std::mutex> lock(connector_mutex);
+    connector_mutex.lock();
     if (connected) {
+        shutdown(socketDescriptor, SHUT_RDWR);
         close(socketDescriptor);
 
         LOG_INFO(std::string("Closed connector (socket " + std::to_string(socketDescriptor) + ")"));
     }
     connected = false;
-    //Not waiting for the client_if thread to die for now
+    connector_mutex.unlock();
 }
 
 /*
@@ -263,13 +265,11 @@ void S3tpConnector::asyncListener() {
 
     while (isConnected()) {
         rd = read(socketDescriptor, &type, sizeof(S3TP_MESSAGE_TYPE));
-        if (rd == CODE_ERROR_SOCKET_NO_CONN) {
+        if (rd == 0) {
             //Socket was already closed
             LOG_WARN("Connection to S3TP was closed by server");
 
-            connector_mutex.lock();
-            connected = false;
-            connector_mutex.unlock();
+            closeConnection();
             break;
         } else if (rd < 0) {
             LOG_ERROR("Unknown error occurred during read phase. Shutting down");
@@ -292,6 +292,7 @@ void S3tpConnector::asyncListener() {
             }
         }
     }
+    LOG_DEBUG("Listener thread: STOP");
 }
 
 bool S3tpConnector::receiveControlMessage(S3TP_CONTROL& control) {
@@ -300,7 +301,7 @@ bool S3tpConnector::receiveControlMessage(S3TP_CONTROL& control) {
     rd = read(socketDescriptor, &control, sizeof(S3TP_CONTROL));
 
     //Handle socket errors
-    if (rd == CODE_ERROR_SOCKET_NO_CONN) {
+    if (rd == 0) {
         connector_mutex.lock();
         connected = false;
         connector_mutex.unlock();
