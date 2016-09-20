@@ -3,8 +3,7 @@
 //
 
 #include "../connector/S3tpConnector.h"
-#include <string>
-#include <iostream>
+#include <csignal>
 
 /*
  * Main Test Program
@@ -23,12 +22,6 @@ class CallbackClass: public S3tpCallback {
     }
 };
 
-struct MyTest {
-    int val1;
-    char test[5];
-    long val2;
-};
-
 int main(int argc, char* argv[]) {
     if (argc != 2)
     {
@@ -36,10 +29,12 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+    signal(SIGPIPE, SIG_IGN);
+
+    std::string testS = "";
     S3tpConnector connector;
     S3TP_CONFIG config;
     CallbackClass callback;
-    bool async = false;
     int port = 0;
 
     int argi = 1;
@@ -47,46 +42,25 @@ int main(int argc, char* argv[]) {
     socket_path = argv[argi++];
 
     std::cout << "Please select a port to connect to: ";
-    std::cin >> port;
+    std::getline(std::cin, testS);
+    port = std::stoi(testS);
     config.port = (uint8_t)port;
     config.channel = 3;
     config.options = S3TP_OPTION_ARQ;
-    printf("Options: %d\n", config.options);
-    std::string testS = "y";
-    //std::cout << "Async comm (y/n)? ";
-    //std::cin >> testS;
-    if (testS.compare("n") == 0) {
-        connector.init(config, nullptr);
-    } else {
-        async = true;
-        connector.init(config, &callback);
-    }
-    sleep(1);
-    if (!async) {
-        MyTest testStr;
-        testStr.val1 = 10;
-        testStr.val2 = 9;
-        testStr.test[0] = 'p';
-        testStr.test[1] = 'i';
-        testStr.test[2] = 'p';
-        testStr.test[3] = 'i';
-        testStr.test[4] = '\0';
-        connector.send(&testStr, sizeof(testStr));
 
-        MyTest response;
-        int res = connector.recv(&response, sizeof(response));
-        printf("Result code %d. Received %d, %s, %ld\n", res, response.val1, response.test, response.val2);
-        printf("What now?\n");
-    } else {
-        while (testS.compare("") != 0 && connector.isConnected()) {
-            std::cout << "Please insert a message to send: \n";
-            std::cin >> testS;
-            connector.send((void *)testS.data(), testS.length());
+    connector.init(config, &callback);
+    sleep(1);
+
+    while (connector.isConnected()) {
+        std::cout << "Please insert a message to send: \n";
+        std::getline(std::cin, testS);
+        if (testS.compare("") == 0) {
+            break;
         }
+        connector.send((void *)testS.data(), testS.length());
     }
 
     connector.closeConnection();
-    printf("Client exited\n");
 
     return 0;
 }
