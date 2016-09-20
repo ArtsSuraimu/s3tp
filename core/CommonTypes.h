@@ -123,6 +123,10 @@ struct S3TP_PACKET{
 		header->setPduLength(pduLen);
 	}
 
+    ~S3TP_PACKET() {
+        delete packet;
+    }
+
 	S3TP_PACKET(const char * packet, int len, uint8_t channel) {
 		//Copying a well formed packet, where all header fields should already be consistent
 		this->packet = new char[len * sizeof(char)];
