@@ -36,9 +36,14 @@ uint8_t Client::getOptions() {
     return options;
 }
 
+/**
+ * During communication, a socket error was encountered.
+ * We forcefully close the socket, then notify listeners that the connection was closed.
+ */
 void Client::closeConnection() {
     pthread_mutex_lock(&client_mutex);
     if (connected) {
+        shutdown(socket, SHUT_RDWR);
         close(socket);
 
         LOG_DEBUG(std::string("Closed socket " + std::to_string(socket)));
@@ -57,6 +62,11 @@ void Client::closeConnection() {
  */
 void Client::handleConnectionClosed() {
     pthread_mutex_lock(&client_mutex);
+    if (connected) {
+        close(socket);
+
+        LOG_DEBUG(std::string("Closed socket " + std::to_string(socket)));
+    }
     connected = false;
     pthread_mutex_unlock(&client_mutex);
     //Notifying s3tp that a port is available again
@@ -148,7 +158,7 @@ void Client::clientRoutine() {
     while (isConnected()) {
         //Checking message type first
         rd = read(socket, &type, sizeof(type));
-        if (rd == CODE_ERROR_SOCKET_NO_CONN) {
+        if (rd <= 0) {
             LOG_INFO(std::string("Client closed socket " + std::to_string(socket)));
             handleConnectionClosed();
             break;
