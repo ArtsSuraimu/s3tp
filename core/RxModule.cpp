@@ -35,10 +35,17 @@ void RxModule::reset() {
     pthread_mutex_unlock(&rx_mutex);
 }
 
-void RxModule::startModule(StatusInterface * statusInterface) {
+void RxModule::setStatusInterface(StatusInterface * statusInterface) {
+    pthread_mutex_lock(&rx_mutex);
+    this->statusInterface = statusInterface;
+    pthread_mutex_unlock(&rx_mutex);
+}
+
+void RxModule::startModule() {
+    pthread_mutex_lock(&rx_mutex);
     received_packets = 0;
     active = true;
-    this->statusInterface = statusInterface;
+    pthread_mutex_unlock(&rx_mutex);
 }
 
 void RxModule::stopModule() {
@@ -61,7 +68,7 @@ bool RxModule::isActive() {
  * Callback implementation
  */
 void RxModule::handleFrame(bool arq, int channel, const void* data, int length) {
-    if (length != MAX_LEN_S3TP_PACKET) {
+    if (length > MAX_LEN_S3TP_PACKET) {
         //TODO: handle error
     }
     //Copying packet. Data argument is not needed anymore afterwards

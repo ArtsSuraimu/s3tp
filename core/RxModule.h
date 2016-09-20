@@ -29,7 +29,8 @@ public:
     RxModule();
     ~RxModule();
 
-    void startModule(StatusInterface * statusInterface);
+    void setStatusInterface(StatusInterface * statusInterface);
+    void startModule();
     void stopModule();
     int openPort(uint8_t port);
     int closePort(uint8_t port);
