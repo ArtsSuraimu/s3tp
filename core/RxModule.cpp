@@ -147,6 +147,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     if (type == S3TP_MSG_SYNC) {
         S3TP_SYNC * sync = (S3TP_SYNC*)packet->getPayload();
         synchronizeStatus(*sync);
+        return CODE_SUCCESS;
     } else if (type != S3TP_MSG_DATA) {
         //Not recognized data message
         LOG_WARN(std::string("Unrecognized message type received: " + std::to_string((int)type)));
