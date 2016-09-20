@@ -60,6 +60,9 @@ void s3tp_daemon::startDaemon() {
 
         LOG_INFO(std::string("Connected to new client on socket " + std::to_string(new_socket)));
 
+        //Remove disconnected clients from structure
+        s3tp.cleanupClients();
+
         tv.tv_sec = 2;
         setsockopt(new_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,sizeof(struct timeval));
         //Receive Client configuration
