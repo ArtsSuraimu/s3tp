@@ -45,6 +45,7 @@ public:
     int stop();
     int sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts);
     Client * getClientConnectedToPort(uint8_t port);
+    void cleanupClients();
 
 private:
     pthread_t assembly_thread;
@@ -71,6 +72,7 @@ private:
     std::map<uint8_t, Client*> clients;
     pthread_mutex_t clients_mutex;
     std::set<uint8_t> channel_blacklist;
+    std::vector<uint8_t> disconnectedClients;
     int checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t msg_len);
     virtual void onDisconnected(void * params);
     virtual void onConnected(void * params);

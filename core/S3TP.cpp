@@ -37,7 +37,6 @@ void S3TP::reset() {
     rx.reset();
     tx.reset();
     pthread_mutex_unlock(&s3tp_mutex);
-    synchronizeStatus();
 }
 
 int S3TP::init(TRANSCEIVER_CONFIG * config) {
@@ -50,12 +49,16 @@ int S3TP::init(TRANSCEIVER_CONFIG * config) {
         transceiver = Transceiver::BackendFactory::fromFireTcp(config->mappings, rx);
     }
     transceiver->start();
-    rx.startModule(this);
+    rx.setStatusInterface(this);
+    rx.startModule();
     tx.startRoutine(rx.link);
 
     int id = pthread_create(&assembly_thread, NULL, &staticAssemblyRoutine, this);
-    printf("Assembly Thread (id %d): START\n", id);
+    LOG_DEBUG(std::string("Assembly Thread (id " + std::to_string(id) + "): START"));
+
     pthread_mutex_unlock(&s3tp_mutex);
+
+    synchronizeStatus();
 
     return CODE_SUCCESS;
 }
@@ -99,6 +102,21 @@ Client * S3TP::getClientConnectedToPort(uint8_t port) {
     Client * cli = it->second;
     pthread_mutex_unlock(&clients_mutex);
     return cli;
+}
+
+void S3TP::cleanupClients() {
+    pthread_mutex_lock(&clients_mutex);
+    for (auto const& port: disconnectedClients) {
+        Client * cli = clients[port];
+        //Client disconnected from port. Mark that port as available again.
+        if (cli != nullptr) {
+            clients.erase(cli->getAppPort());
+            cli->kill();
+            delete cli;
+        }
+    }
+    disconnectedClients.clear();
+    pthread_mutex_unlock(&clients_mutex);
 }
 
 int S3TP::sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
@@ -256,14 +274,10 @@ int S3TP::checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t 
  */
 void S3TP::onDisconnected(void * params) {
     Client * cli = (Client *)params;
-    //Client disconnected from port. Mark that port as available again.
-    if (this->getClientConnectedToPort(cli->getAppPort()) == cli) {
-        pthread_mutex_lock(&clients_mutex);
-        clients.erase(cli->getAppPort());
-        rx.closePort(cli->getAppPort());
-        pthread_mutex_unlock(&clients_mutex);
-        delete cli;
-    }
+    pthread_mutex_lock(&clients_mutex);
+    disconnectedClients.push_back(cli->getAppPort());
+    pthread_mutex_unlock(&clients_mutex);
+    rx.closePort(cli->getAppPort());
 }
 
 void S3TP::onConnected(void * params) {
@@ -284,6 +298,9 @@ int S3TP::onApplicationMessage(void * data, size_t len, void * params) {
  */
 void S3TP::onLinkStatusChanged(bool active) {
     tx.notifyLinkAvailability(active);
+    if (active) {
+        synchronizeStatus();
+    }
 }
 
 void S3TP::onError(int error, void * params) {
@@ -293,10 +310,10 @@ void S3TP::onError(int error, void * params) {
 void S3TP::onSynchronization() {
     pthread_mutex_lock(&s3tp_mutex);
     if (syncScheduled) {
-        //Not going to sync forever. After first sync we set the sync off
+        // Not going to sync forever. After first sync we set the sync off
         syncScheduled = false;
     } else {
-        //Didn't receive any previous sync request (and sync wasn't self-initiated),
+        // Didn't receive any previous sync request (and sync wasn't self-initiated),
         // so we respond with another sync
         synchronizeStatus();
     }
