@@ -8,7 +8,9 @@
 TxModule::TxModule() {
     state = WAITING;
     global_seq_num = 0;
-    scheduled_sync = true;
+    scheduled_sync = false;
+    sendingFragments = false;
+    currentPort = 0;
     pthread_mutex_init(&tx_mutex, NULL);
     pthread_cond_init(&tx_cond, NULL);
     outBuffer = new Buffer(this);
@@ -41,8 +43,8 @@ void TxModule::synchronizeStatus() {
     for (std::map<uint8_t, uint8_t>::iterator it = port_sequence.begin(); it != port_sequence.end(); ++it) {
         syncStructure.port_seq[it->first] = it->second;
     }
-    S3TP_PACKET * packet = new S3TP_PACKET((char *)&syncStructure, sizeof(syncStructure));
-    packet->channel = 0; //TODO: need some optimal channel (dynamically)
+    S3TP_PACKET * packet = new S3TP_PACKET((char *)&syncStructure, sizeof(S3TP_SYNC));
+    packet->channel = 3; //TODO: need some optimal channel (dynamically)
     S3TP_HEADER * header = packet->getHeader();
     header->setMessageType(S3TP_MSG_SYNC);
     header->setPort(0);
@@ -56,6 +58,8 @@ void TxModule::synchronizeStatus() {
     bool arq = S3TP_ARQ;
     LOG_DEBUG("TX: Sync Packet sent to receiver");
     linkInterface->sendFrame(arq, packet->channel, packet->packet, packet->getLength());
+
+    delete packet;
 }
 
 //Private methods
@@ -98,6 +102,7 @@ void TxModule::txRoutine() {
 
         hdr->setGlobalSequence(global_seq_num);
         if (!hdr->moreFragments()) {
+            //Need to increase the current global sequence
             global_seq_num++;
         }
         to_consume_port_seq[hdr->getPort()]++;
@@ -196,8 +201,6 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
         hdr->setMoreFragments();
     } else {
         hdr->unsetMoreFragments();
-        //Need to increase the current global sequence
-        global_seq_num++;
     }
     //Increasing port sequence
     int port = hdr->getPort();
