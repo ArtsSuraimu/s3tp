@@ -11,6 +11,7 @@ RxModule::RxModule() {
     pthread_mutex_init(&rx_mutex, NULL);
     pthread_cond_init(&available_msg_cond, NULL);
     inBuffer = new Buffer(this);
+    statusInterface = NULL;
 }
 
 RxModule::~RxModule() {
@@ -78,9 +79,11 @@ void RxModule::handleFrame(bool arq, int channel, const void* data, int length) 
 }
 
 void RxModule::handleLinkStatus(bool linkStatus) {
+    pthread_mutex_lock(&rx_mutex);
     if (statusInterface != NULL) {
         statusInterface->onLinkStatusChanged(linkStatus);
     }
+    pthread_mutex_unlock(&rx_mutex);
 }
 
 void RxModule::handleBufferEmpty(int channel) {
@@ -98,7 +101,7 @@ int RxModule::openPort(uint8_t port) {
         pthread_mutex_unlock(&rx_mutex);
         return PORT_ALREADY_OPEN;
     }
-    open_ports[port] = 0;
+    open_ports[port] = 1;
     pthread_mutex_unlock(&rx_mutex);
 
     return CODE_SUCCESS;
@@ -112,6 +115,7 @@ int RxModule::closePort(uint8_t port) {
     }
     if (open_ports.find(port) != open_ports.end()) {
         open_ports.erase(port);
+        pthread_mutex_unlock(&rx_mutex);
         return CODE_SUCCESS;
     }
 
