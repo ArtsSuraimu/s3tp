@@ -14,6 +14,8 @@
 #define S3TP_MSG_DATA 0x00
 #define S3TP_MSG_SYNC 0x03
 
+#define S3TP_VIRTUAL_CHANNELS 8
+
 typedef int SOCKET;
 typedef uint8_t S3TP_MSG_TYPE;
 
