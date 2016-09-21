@@ -88,6 +88,7 @@ void RxModule::handleLinkStatus(bool linkStatus) {
 
 void RxModule::handleBufferEmpty(int channel) {
     //The channel queue is not full anymore, so we can start writing on it again
+    LOG_DEBUG(std::string("Channel is now empty again: " + std::to_string(channel)));
     //TODO: implement
 }
 
@@ -326,4 +327,9 @@ int RxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     }
     pthread_mutex_unlock(&rx_mutex);
     return comp;
+}
+
+bool RxModule::isElementValid(S3TP_PACKET * element) {
+    //Not needed for Rx Module. Return true by default
+    return true;
 }

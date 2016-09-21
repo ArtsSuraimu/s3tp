@@ -40,6 +40,7 @@ public:
     void waitForNextAvailableMessage(pthread_mutex_t * callerMutex);
     char * getNextCompleteMessage(uint16_t * len, int * error, uint8_t * port);
     virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
+    virtual bool isElementValid(S3TP_PACKET * element);
     void reset();
 private:
     bool active;
