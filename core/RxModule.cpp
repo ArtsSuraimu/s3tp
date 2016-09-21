@@ -2,7 +2,6 @@
 // Created by Lorenzo Donini on 02/09/16.
 //
 
-#include <vector>
 #include "RxModule.h"
 
 RxModule::RxModule() {
@@ -80,6 +79,7 @@ void RxModule::handleFrame(bool arq, int channel, const void* data, int length) 
 
 void RxModule::handleLinkStatus(bool linkStatus) {
     pthread_mutex_lock(&rx_mutex);
+    LOG_DEBUG("Link status changed");
     if (statusInterface != NULL) {
         statusInterface->onLinkStatusChanged(linkStatus);
     }
@@ -87,6 +87,7 @@ void RxModule::handleLinkStatus(bool linkStatus) {
 }
 
 void RxModule::handleBufferEmpty(int channel) {
+    //The channel queue is not full anymore, so we can start writing on it again
     //TODO: implement
 }
 

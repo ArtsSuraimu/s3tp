@@ -11,6 +11,7 @@
 #include "StatusInterface.h"
 #include <cstring>
 #include <map>
+#include <vector>
 #include <trctrl/LinkCallback.h>
 
 #define PORT_ALREADY_OPEN -1
