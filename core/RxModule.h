@@ -25,7 +25,7 @@
 #define MAX_REORDERING_WINDOW 256
 
 class RxModule: public Transceiver::LinkCallback,
-                        PriorityComparator<S3TP_PACKET*> {
+                        PolicyActor<S3TP_PACKET*> {
 public:
     RxModule();
     ~RxModule();

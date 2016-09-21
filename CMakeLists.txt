@@ -33,7 +33,7 @@ set(SOURCE_FILES
         core/Client.h
         core/ClientInterface.h
         core/StatusInterface.h
-        core/PriorityComparator.h
+        core/PolicyActor.h
         test/s3tp_start.cpp
         core/Logger.h)
 

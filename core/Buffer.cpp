@@ -5,7 +5,7 @@
 #include "Buffer.h"
 
 //Ctor
-Buffer::Buffer(PriorityComparator<S3TP_PACKET*> * comparator) {
+Buffer::Buffer(PolicyActor<S3TP_PACKET*> * comparator) {
     pthread_mutex_init(&buffer_mutex, NULL);
     this->comparator = comparator;
 }

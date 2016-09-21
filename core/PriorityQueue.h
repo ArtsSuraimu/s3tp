@@ -11,7 +11,7 @@
 #define CORE_QUEUE_H_
 
 #include "CommonTypes.h"
-#include "PriorityComparator.h"
+#include "PolicyActor.h"
 #include <pthread.h>
 #include <assert.h>
 
@@ -37,7 +37,7 @@ public:
 	T pop();
 	T peek();
 	bool isEmpty();
-	int push(T element, PriorityComparator<T> * comparator);
+	int push(T element, PolicyActor<T> * comparator);
 	uint32_t computeBufferSize();
 	uint16_t getSize();
 	void lock();
@@ -138,7 +138,7 @@ T PriorityQueue<T>::pop() {
 }
 
 template <typename T>
-int PriorityQueue<T>::push(T element, PriorityComparator<T> * comparator) {
+int PriorityQueue<T>::push(T element, PolicyActor<T> * comparator) {
 	PriorityQueue_node<T> *ref, *newNode, *swap;
 
 	//Enter critical section

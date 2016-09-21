@@ -18,7 +18,7 @@
 
 #define DEFAULT_SYNC_CHANNEL 3
 
-class TxModule : public PriorityComparator<S3TP_PACKET *> {
+class TxModule : public PolicyActor<S3TP_PACKET *> {
 public:
     enum STATE {
         RUNNING,
