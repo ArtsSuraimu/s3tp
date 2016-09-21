@@ -10,10 +10,13 @@
 #include "utilities.h"
 #include <map>
 #include <trctrl/LinkInterface.h>
+#include <set>
 
 #define TX_PARAM_RECOVERY 0x01
 #define TX_PARAM_CUSTOM 0x02
 #define CODE_INACTIVE_ERROR -1
+
+#define DEFAULT_SYNC_CHANNEL 3
 
 class TxModule : public PriorityComparator<S3TP_PACKET *> {
 public:
@@ -32,6 +35,8 @@ public:
     int enqueuePacket(S3TP_PACKET * packet, uint8_t frag_no, bool more_fragments, uint8_t spi_channel, uint8_t options);
     void notifyLinkAvailability(bool available);
     bool isQueueAvailable(uint8_t port, uint8_t no_packets);
+    void setChannelAvailable(uint8_t channel, bool available);
+    bool isChannelAvailable(uint8_t channel);
     void reset();
     void scheduleSync();
 private:
@@ -39,7 +44,9 @@ private:
     bool active;
     pthread_t tx_thread;
     pthread_mutex_t tx_mutex;
+    pthread_mutex_t channel_mutex;
     pthread_cond_t tx_cond;
+    std::set<uint8_t> channel_blacklist;
     bool sendingFragments;
     uint8_t currentPort;
     uint8_t global_seq_num;
@@ -53,6 +60,7 @@ private:
 
     void txRoutine();
     static void * staticTxRoutine(void * args);
+    bool channelsAvailable();
     void synchronizeStatus();
     virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
 };

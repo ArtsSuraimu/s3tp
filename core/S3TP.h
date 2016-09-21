@@ -16,7 +16,6 @@
 #include <trctrl/BackendFactory.h>
 #include <string>
 #include <vector>
-#include <set>
 
 #define CODE_SUCCESS 0
 #define CODE_ERROR_MAX_MESSAGE_SIZE -2
@@ -71,7 +70,6 @@ private:
     //Clients
     std::map<uint8_t, Client*> clients;
     pthread_mutex_t clients_mutex;
-    std::set<uint8_t> channel_blacklist;
     std::vector<uint8_t> disconnectedClients;
     int checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t msg_len);
     virtual void onDisconnected(void * params);

@@ -12,6 +12,7 @@ TxModule::TxModule() {
     sendingFragments = false;
     currentPort = 0;
     pthread_mutex_init(&tx_mutex, NULL);
+    pthread_mutex_init(&channel_mutex, NULL);
     pthread_cond_init(&tx_cond, NULL);
     outBuffer = new Buffer(this);
     LOG_DEBUG("Created Tx Module");
@@ -24,6 +25,7 @@ TxModule::~TxModule() {
     delete outBuffer;
     pthread_mutex_unlock(&tx_mutex);
     pthread_mutex_destroy(&tx_mutex);
+    pthread_mutex_destroy(&channel_mutex);
     LOG_DEBUG("Destroyed Tx Module");
 }
 
@@ -57,7 +59,8 @@ void TxModule::synchronizeStatus() {
 
     bool arq = S3TP_ARQ;
     LOG_DEBUG("TX: Sync Packet sent to receiver");
-    linkInterface->sendFrame(arq, packet->channel, packet->packet, packet->getLength());
+    int res = linkInterface->sendFrame(arq, packet->channel, packet->packet, packet->getLength());
+    LOG_DEBUG(std::string("Result from sendFrame " + std::to_string(res)));
 
     delete packet;
 }
@@ -66,15 +69,19 @@ void TxModule::synchronizeStatus() {
 void TxModule::txRoutine() {
     pthread_mutex_lock(&tx_mutex);
     while(active) {
-        if (!linkInterface->getLinkStatus()) {
+        if (!linkInterface->getLinkStatus() || !channelsAvailable()) {
             state = BLOCKED;
             pthread_cond_wait(&tx_cond, &tx_mutex);
             continue;
         }
         //Sync has priority over any other packet
-        if (scheduled_sync) {
-            synchronizeStatus();
-            scheduled_sync = false;
+        if (scheduled_sync && isChannelAvailable(DEFAULT_SYNC_CHANNEL)) {
+            if (linkInterface->getBufferFull(DEFAULT_SYNC_CHANNEL)) {
+                setChannelAvailable(DEFAULT_SYNC_CHANNEL, false);
+            } else {
+                synchronizeStatus();
+                scheduled_sync = false;
+            }
         }
         if(!outBuffer->packetsAvailable()) {
             state = WAITING;
@@ -92,6 +99,7 @@ void TxModule::txRoutine() {
         S3TP_PACKET * packet = (sendingFragments) ?
                                outBuffer->getNextPacket(currentPort) :
                                outBuffer->getNextAvailablePacket();
+        
         if (packet == NULL) {
             continue;
         }
@@ -165,6 +173,30 @@ bool TxModule::isQueueAvailable(uint8_t port, uint8_t no_packets) {
     PriorityQueue<S3TP_PACKET *> * queue = outBuffer->getQueue(port);
 
     return queue->getSize() + no_packets <= MAX_QUEUE_SIZE;
+}
+
+void TxModule::setChannelAvailable(uint8_t channel, bool available) {
+    pthread_mutex_lock(&channel_mutex);
+    if (available) {
+        channel_blacklist.erase(channel);
+    } else {
+        channel_blacklist.insert(channel);
+    }
+    pthread_mutex_unlock(&channel_mutex);
+}
+
+bool TxModule::isChannelAvailable(uint8_t channel) {
+    pthread_mutex_lock(&channel_mutex);
+    bool result = channel_blacklist.find(channel) != channel_blacklist.end();
+    pthread_mutex_unlock(&channel_mutex);
+    return result;
+}
+
+bool TxModule::channelsAvailable() {
+    pthread_mutex_lock(&channel_mutex);
+    bool result = channel_blacklist.size() < S3TP_VIRTUAL_CHANNELS;
+    pthread_mutex_unlock(&channel_mutex);
+    return result;
 }
 
 void TxModule::notifyLinkAvailability(bool available) {
