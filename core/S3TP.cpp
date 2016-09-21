@@ -41,6 +41,7 @@ void S3TP::reset() {
 
 int S3TP::init(TRANSCEIVER_CONFIG * config) {
     pthread_mutex_lock(&s3tp_mutex);
+
     active = true;
 
     if (config->type == SPI) {
@@ -48,8 +49,13 @@ int S3TP::init(TRANSCEIVER_CONFIG * config) {
     } else if (config->type == FIRE) {
         transceiver = Transceiver::BackendFactory::fromFireTcp(config->mappings, rx);
     }
-    transceiver->start();
+
     rx.setStatusInterface(this);
+    pthread_mutex_unlock(&s3tp_mutex);
+
+    transceiver->start();
+
+    pthread_mutex_lock(&s3tp_mutex);
     rx.startModule();
     tx.startRoutine(rx.link);
 
@@ -57,8 +63,6 @@ int S3TP::init(TRANSCEIVER_CONFIG * config) {
     LOG_DEBUG(std::string("Assembly Thread (id " + std::to_string(id) + "): START"));
 
     pthread_mutex_unlock(&s3tp_mutex);
-
-    synchronizeStatus();
 
     return CODE_SUCCESS;
 }
@@ -262,7 +266,7 @@ int S3TP::checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t 
     //Checking if transmission Q can contain the desired amount of packets
     if (!tx.isQueueAvailable(port, no_packets)) {
         return CODE_QUEUE_FULL;
-    } else if (channel_blacklist.find(channel) != channel_blacklist.end()) {
+    } else if (!tx.isChannelAvailable(channel)) {
         //Channel is currently broken
         return CODE_CHANNEL_BROKEN;
     }
