@@ -63,6 +63,7 @@ private:
     bool channelsAvailable();
     void synchronizeStatus();
     virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
+    virtual bool isElementValid(S3TP_PACKET * element);
 };
 
 #endif //S3TP_TXMODULE_H

@@ -99,8 +99,11 @@ void TxModule::txRoutine() {
         S3TP_PACKET * packet = (sendingFragments) ?
                                outBuffer->getNextPacket(currentPort) :
                                outBuffer->getNextAvailablePacket();
-        
+
         if (packet == NULL) {
+            //Channels are currently blocked and packets cannot be sent
+            state = BLOCKED;
+            pthread_cond_wait(&tx_cond, &tx_mutex);
             continue;
         }
         pthread_mutex_unlock(&tx_mutex);
@@ -179,6 +182,7 @@ void TxModule::setChannelAvailable(uint8_t channel, bool available) {
     pthread_mutex_lock(&channel_mutex);
     if (available) {
         channel_blacklist.erase(channel);
+        pthread_cond_signal(&tx_cond);
     } else {
         channel_blacklist.insert(channel);
     }
@@ -187,7 +191,8 @@ void TxModule::setChannelAvailable(uint8_t channel, bool available) {
 
 bool TxModule::isChannelAvailable(uint8_t channel) {
     pthread_mutex_lock(&channel_mutex);
-    bool result = channel_blacklist.find(channel) != channel_blacklist.end();
+    //result = channel is not in blacklist
+    bool result = channel_blacklist.find(channel) == channel_blacklist.end();
     pthread_mutex_unlock(&channel_mutex);
     return result;
 }
@@ -263,5 +268,9 @@ int TxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     }
     pthread_mutex_unlock(&tx_mutex);
     return comp;
+}
+
+bool TxModule::isElementValid(S3TP_PACKET * element) {
+    return isChannelAvailable(element->channel);
 }
 
