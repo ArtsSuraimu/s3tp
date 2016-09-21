@@ -10,7 +10,7 @@
 
 class Buffer {
 public:
-    Buffer(PolicyActor<S3TP_PACKET*> * comparator);
+    Buffer(PolicyActor<S3TP_PACKET*> * policyActor);
     ~Buffer();
     bool packetsAvailable();
     int write(S3TP_PACKET * packet);
@@ -20,7 +20,7 @@ public:
     void clear();
 
 private:
-    PolicyActor<S3TP_PACKET *> * comparator;
+    PolicyActor<S3TP_PACKET *> * policyActor;
     std::map<int, PriorityQueue<S3TP_PACKET*>*> queues;
     std::map<int, int> packet_counter;
 

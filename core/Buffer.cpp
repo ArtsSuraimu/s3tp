@@ -5,9 +5,9 @@
 #include "Buffer.h"
 
 //Ctor
-Buffer::Buffer(PolicyActor<S3TP_PACKET*> * comparator) {
+Buffer::Buffer(PolicyActor<S3TP_PACKET*> * policyActor) {
     pthread_mutex_init(&buffer_mutex, NULL);
-    this->comparator = comparator;
+    this->policyActor = policyActor;
 }
 
 //Dtor
@@ -45,7 +45,7 @@ int Buffer::write(S3TP_PACKET * packet) {
         queue = new PriorityQueue<S3TP_PACKET*>();
         queues[port] = queue;
     }
-    if (queue->push(packet, comparator) == QUEUE_FULL) {
+    if (queue->push(packet, policyActor) == QUEUE_FULL) {
         LOG_INFO(std::string("Queue " + std::to_string(port)
                               + " full. Dropped packet with sequence number "
                               + std::to_string((int)hdr->seq_port)));
@@ -86,8 +86,14 @@ S3TP_PACKET * Buffer::getNextAvailablePacket() {
         pthread_mutex_unlock(&buffer_mutex);
         return NULL;
     }
-    std::map<int, int>::iterator it = packet_counter.begin();
-    S3TP_PACKET * packet = popPacketInternal(it->first);
+
+    S3TP_PACKET * packet = NULL;
+    for (auto const &it: packet_counter) {
+        packet = popPacketInternal(it.first);
+        if (packet != NULL) {
+            break;
+        }
+    }
     pthread_mutex_unlock(&buffer_mutex);
     return packet;
 }
@@ -97,7 +103,11 @@ S3TP_PACKET * Buffer::popPacketInternal(int port) {
     if (queue == NULL || queue->isEmpty()) {
         return NULL;
     }
-    S3TP_PACKET * packet = queue->pop();
+    S3TP_PACKET * packet = queue->peek();
+    if (!policyActor->isElementValid(packet)) {
+        return NULL;
+    }
+    packet = queue->pop();
     if (queue->isEmpty()) {
         packet_counter.erase(port);
     } else {
