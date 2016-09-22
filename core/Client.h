@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <s3tp/core/S3tpShared.h>
 #include "S3tpShared.h"
 #include "ClientInterface.h"
 

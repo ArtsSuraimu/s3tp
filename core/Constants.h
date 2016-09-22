@@ -12,7 +12,7 @@
 
 #include <cstdint>
 #include <cstring>
-#include "S3tpShared.h"
+#include <s3tp/core/S3tpShared.h>
 
 #define ETH_S3TP 0xBEEF
 #define MTU 1021
