@@ -33,35 +33,46 @@ public:
     void startRoutine(Transceiver::LinkInterface * spi_if);
     void stopRoutine();
     int enqueuePacket(S3TP_PACKET * packet, uint8_t frag_no, bool more_fragments, uint8_t spi_channel, uint8_t options);
+    void reset();
+    void scheduleSync();
+
+    //Public channel and link methods
     void notifyLinkAvailability(bool available);
     bool isQueueAvailable(uint8_t port, uint8_t no_packets);
     void setChannelAvailable(uint8_t channel, bool available);
     bool isChannelAvailable(uint8_t channel);
-    void reset();
-    void scheduleSync();
 private:
     STATE state;
     bool active;
     pthread_t tx_thread;
     pthread_mutex_t tx_mutex;
-    pthread_mutex_t channel_mutex;
     pthread_cond_t tx_cond;
     std::set<uint8_t> channel_blacklist;
     bool sendingFragments;
     uint8_t currentPort;
-    uint8_t global_seq_num;
     Transceiver::LinkInterface * linkInterface;
-    bool scheduled_sync;
-    S3TP_SYNC syncStructure;
 
+    //Sync variables
+    bool scheduled_sync;
+    S3TP_SYNC prototypeSync = S3TP_SYNC(); //Used only for initialization. Never afterwards
+    S3TP_PACKET syncPacket = S3TP_PACKET((char *)&prototypeSync, sizeof(S3TP_SYNC));
+
+    //Buffer and port sequences
     std::map<uint8_t, uint8_t> to_consume_port_seq;
     std::map<uint8_t, uint8_t> port_sequence;
+    uint8_t global_seq_num;
     Buffer * outBuffer;
 
     void txRoutine();
     static void * staticTxRoutine(void * args);
-    bool channelsAvailable();
     void synchronizeStatus();
+
+    //Internal methods for accessing channels (do not use locking)
+    bool _channelsAvailable();
+    void _setChannelAvailable(uint8_t channel, bool available);
+    bool _isChannelAvailable(uint8_t channel);
+
+    //Policy Actor implementation
     virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
     virtual bool isElementValid(S3TP_PACKET * element);
 };

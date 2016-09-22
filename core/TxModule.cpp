@@ -10,9 +10,21 @@ TxModule::TxModule() {
     global_seq_num = 0;
     scheduled_sync = false;
     sendingFragments = false;
+    active = false;
     currentPort = 0;
+
+    //Setting up unique sync packet
+    syncPacket.channel = DEFAULT_SYNC_CHANNEL;
+    syncPacket.options = S3TP_OPTION_ARQ;
+    S3TP_HEADER * hdr = syncPacket.getHeader();
+    hdr->setMessageType(S3TP_MSG_SYNC);
+    hdr->setPort(0);
+    hdr->setGlobalSequence(0);
+    hdr->setSubSequence(0);
+    hdr->unsetMoreFragments();
+    hdr->seq_port = 0;
+
     pthread_mutex_init(&tx_mutex, NULL);
-    pthread_mutex_init(&channel_mutex, NULL);
     pthread_cond_init(&tx_cond, NULL);
     outBuffer = new Buffer(this);
     LOG_DEBUG("Created Tx Module");
@@ -25,7 +37,6 @@ TxModule::~TxModule() {
     delete outBuffer;
     pthread_mutex_unlock(&tx_mutex);
     pthread_mutex_destroy(&tx_mutex);
-    pthread_mutex_destroy(&channel_mutex);
     LOG_DEBUG("Destroyed Tx Module");
 }
 
@@ -40,44 +51,35 @@ void TxModule::reset() {
 
 void TxModule::synchronizeStatus() {
     //Not locking, as the method should only be called from a synchronized code block
-    std::fill(syncStructure.port_seq, syncStructure.port_seq + DEFAULT_MAX_OUT_PORTS, 0);
-    syncStructure.tx_global_seq = global_seq_num;
+    S3TP_SYNC * syncStructure = (S3TP_SYNC *)syncPacket.getPayload();
+    std::fill(syncStructure->port_seq, syncStructure->port_seq + DEFAULT_MAX_OUT_PORTS, 0);
+    syncStructure->tx_global_seq = global_seq_num;
     for (std::map<uint8_t, uint8_t>::iterator it = port_sequence.begin(); it != port_sequence.end(); ++it) {
-        syncStructure.port_seq[it->first] = it->second;
+        syncStructure->port_seq[it->first] = it->second;
     }
-    S3TP_PACKET * packet = new S3TP_PACKET((char *)&syncStructure, sizeof(S3TP_SYNC));
-    packet->channel = 3; //TODO: need some optimal channel (dynamically)
-    S3TP_HEADER * header = packet->getHeader();
-    header->setMessageType(S3TP_MSG_SYNC);
-    header->setPort(0);
-    header->setGlobalSequence(0);
-    header->setSubSequence(0);
-    header->unsetMoreFragments();
-    header->seq_port = 0;
-    uint16_t crc = calc_checksum(packet->getPayload(), header->getPduLength());
-    header->crc = crc;
+
+    S3TP_HEADER * hdr = syncPacket.getHeader();
+    uint16_t crc = calc_checksum(syncPacket.getPayload(), hdr->getPduLength());
+    hdr->crc = crc;
 
     bool arq = S3TP_ARQ;
     LOG_DEBUG("TX: Sync Packet sent to receiver");
-    int res = linkInterface->sendFrame(arq, packet->channel, packet->packet, packet->getLength());
-    LOG_DEBUG(std::string("Result from sendFrame " + std::to_string(res)));
-
-    delete packet;
+    linkInterface->sendFrame(arq, syncPacket.channel, syncPacket.packet, syncPacket.getLength());
 }
 
 //Private methods
 void TxModule::txRoutine() {
     pthread_mutex_lock(&tx_mutex);
     while(active) {
-        if (!linkInterface->getLinkStatus() || !channelsAvailable()) {
+        if (!linkInterface->getLinkStatus() || !_channelsAvailable()) {
             state = BLOCKED;
             pthread_cond_wait(&tx_cond, &tx_mutex);
             continue;
         }
         //Sync has priority over any other packet
-        if (scheduled_sync && isChannelAvailable(DEFAULT_SYNC_CHANNEL)) {
+        if (scheduled_sync && _isChannelAvailable(DEFAULT_SYNC_CHANNEL)) {
             if (linkInterface->getBufferFull(DEFAULT_SYNC_CHANNEL)) {
-                setChannelAvailable(DEFAULT_SYNC_CHANNEL, false);
+                _setChannelAvailable(DEFAULT_SYNC_CHANNEL, false);
             } else {
                 synchronizeStatus();
                 scheduled_sync = false;
@@ -106,7 +108,6 @@ void TxModule::txRoutine() {
             pthread_cond_wait(&tx_cond, &tx_mutex);
             continue;
         }
-        pthread_mutex_unlock(&tx_mutex);
         S3TP_HEADER * hdr = packet->getHeader();
         currentPort = hdr->getPort();
         sendingFragments = hdr->moreFragments();
@@ -117,6 +118,7 @@ void TxModule::txRoutine() {
             global_seq_num++;
         }
         to_consume_port_seq[hdr->getPort()]++;
+        pthread_mutex_unlock(&tx_mutex);
 
         LOG_DEBUG(std::string("TX: Packet sent from port " + std::to_string((int)hdr->getPort())
                               + " to Link Layer -> glob_seq: " + std::to_string((int)hdr->getGlobalSequence())
@@ -124,6 +126,8 @@ void TxModule::txRoutine() {
                               + ", port_seq: " + std::to_string((int)hdr->seq_port)));
 
         bool arq = packet->options & S3TP_ARQ;
+
+        //TODO: check if sendFrame failed. If yes, need to blacklist channel
         linkInterface->sendFrame(arq, packet->channel, packet->packet, packet->getLength());
         //TODO: save in history queue (once implemented)
         delete packet;
@@ -179,29 +183,46 @@ bool TxModule::isQueueAvailable(uint8_t port, uint8_t no_packets) {
 }
 
 void TxModule::setChannelAvailable(uint8_t channel, bool available) {
-    pthread_mutex_lock(&channel_mutex);
+    pthread_mutex_lock(&tx_mutex);
     if (available) {
         channel_blacklist.erase(channel);
+        LOG_DEBUG(std::string("Whitelisted channel " + std::to_string((int)channel)));
         pthread_cond_signal(&tx_cond);
     } else {
         channel_blacklist.insert(channel);
+        LOG_DEBUG(std::string("Blacklisted channel " + std::to_string((int)channel)));
     }
-    pthread_mutex_unlock(&channel_mutex);
+    pthread_mutex_unlock(&tx_mutex);
 }
 
 bool TxModule::isChannelAvailable(uint8_t channel) {
-    pthread_mutex_lock(&channel_mutex);
+    pthread_mutex_lock(&tx_mutex);
     //result = channel is not in blacklist
     bool result = channel_blacklist.find(channel) == channel_blacklist.end();
-    pthread_mutex_unlock(&channel_mutex);
+    pthread_mutex_unlock(&tx_mutex);
     return result;
 }
 
-bool TxModule::channelsAvailable() {
-    pthread_mutex_lock(&channel_mutex);
-    bool result = channel_blacklist.size() < S3TP_VIRTUAL_CHANNELS;
-    pthread_mutex_unlock(&channel_mutex);
-    return result;
+/*
+ * Internal channel utility methods
+ */
+bool TxModule::_channelsAvailable() {
+    return channel_blacklist.size() < S3TP_VIRTUAL_CHANNELS;
+}
+
+void TxModule::_setChannelAvailable(uint8_t channel, bool available) {
+    if (available) {
+        channel_blacklist.erase(channel);
+        LOG_DEBUG(std::string("Whitelisted channel " + std::to_string((int)channel)));
+        pthread_cond_signal(&tx_cond);
+    } else {
+        channel_blacklist.insert(channel);
+        LOG_DEBUG(std::string("Blacklisted channel " + std::to_string((int)channel)));
+    }
+}
+
+bool TxModule::_isChannelAvailable(uint8_t channel) {
+    return channel_blacklist.find(channel) == channel_blacklist.end();
 }
 
 void TxModule::notifyLinkAvailability(bool available) {
@@ -271,6 +292,6 @@ int TxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
 }
 
 bool TxModule::isElementValid(S3TP_PACKET * element) {
-    return isChannelAvailable(element->channel);
+    return _isChannelAvailable(element->channel);
 }
 
