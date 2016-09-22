@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.4)
 project(s3tp)
 
 # packages
-include_directories(../)
-
 find_package(moveio REQUIRED)
 include_directories(${MOVEIO_INCLUDE_DIRS})
 
