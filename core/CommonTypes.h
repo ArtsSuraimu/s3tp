@@ -14,6 +14,9 @@
 #define S3TP_MSG_DATA 0x00
 #define S3TP_MSG_SYNC 0x03
 
+#define S3TP_SYNC_INITIATOR 0x00
+#define S3TP_SYNC_ACK 0xFF
+
 #define S3TP_VIRTUAL_CHANNELS 8
 
 typedef int SOCKET;
@@ -150,6 +153,10 @@ struct S3TP_PACKET{
 };
 
 struct S3TP_SYNC {
+	/**
+	 * By default, the ID is 0 if the sender is the initiator,
+	 * FF if the sender responds to a sync */
+	uint8_t syncId;
 	uint8_t tx_global_seq = 0;
 	uint8_t port_seq [DEFAULT_MAX_OUT_PORTS] = {0};
 };
