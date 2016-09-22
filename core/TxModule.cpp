@@ -138,9 +138,13 @@ void TxModule::txRoutine() {
     pthread_exit(NULL);
 }
 
-void TxModule::scheduleSync() {
+void TxModule::scheduleSync(uint8_t syncId) {
     pthread_mutex_lock(&tx_mutex);
     scheduled_sync = true;
+    S3TP_SYNC * syncStructure = (S3TP_SYNC *)syncPacket.getPayload();
+    syncStructure->syncId = syncId;
+    //Notifying routine thread that a new sync message is waiting
+    pthread_cond_signal(&tx_cond);
     pthread_mutex_unlock(&tx_mutex);
 }
 

@@ -34,7 +34,7 @@ public:
     void stopRoutine();
     int enqueuePacket(S3TP_PACKET * packet, uint8_t frag_no, bool more_fragments, uint8_t spi_channel, uint8_t options);
     void reset();
-    void scheduleSync();
+    void scheduleSync(uint8_t syncId);
 
     //Public channel and link methods
     void notifyLinkAvailability(bool available);

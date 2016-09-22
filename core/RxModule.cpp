@@ -178,7 +178,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
                           + std::to_string((int)hdr->getPort())
                           + " -> glob_seq " + std::to_string((int)hdr->getGlobalSequence())
                           + ", sub_seq " + std::to_string((int)hdr->getSubSequence())
-                          + ", port_seq" + std::to_string((int)hdr->seq_port)));
+                          + ", port_seq " + std::to_string((int)hdr->seq_port)));
 
     pthread_mutex_lock(&rx_mutex);
     if (isCompleteMessageForPortAvailable(hdr->getPort())) {
@@ -209,7 +209,7 @@ void RxModule::synchronizeStatus(S3TP_SYNC& sync) {
     }
     //Notify main module
     LOG_DEBUG("Receiver sequences synchronized correctly");
-    statusInterface->onSynchronization();
+    statusInterface->onSynchronization(sync.syncId);
     pthread_mutex_unlock(&rx_mutex);
 }
 

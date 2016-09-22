@@ -89,11 +89,13 @@ int S3TP::stop() {
     return CODE_SUCCESS;
 }
 
-void S3TP::synchronizeStatus() {
-    pthread_mutex_lock(&s3tp_mutex);
-    syncScheduled = true;
-    tx.scheduleSync();
-    pthread_mutex_unlock(&s3tp_mutex);
+void S3TP::synchronizeStatus(uint8_t syncId) {
+    pthread_mutex_lock(&clients_mutex);
+    //Sending a sync message only if we have at least one open port, otherwise it's meaningless
+    if (clients.size() > 0) {
+        tx.scheduleSync(syncId);
+    }
+    pthread_mutex_unlock(&clients_mutex);
 }
 
 Client * S3TP::getClientConnectedToPort(uint8_t port) {
@@ -290,6 +292,7 @@ void S3TP::onConnected(void * params) {
     clients[cli->getAppPort()] = cli;
     pthread_mutex_unlock(&clients_mutex);
     rx.openPort(cli->getAppPort());
+    synchronizeStatus(S3TP_SYNC_INITIATOR);
 }
 
 int S3TP::onApplicationMessage(void * data, size_t len, void * params) {
@@ -303,7 +306,7 @@ int S3TP::onApplicationMessage(void * data, size_t len, void * params) {
 void S3TP::onLinkStatusChanged(bool active) {
     tx.notifyLinkAvailability(active);
     if (active) {
-        synchronizeStatus();
+        synchronizeStatus(S3TP_SYNC_INITIATOR);
     }
 }
 
@@ -315,15 +318,10 @@ void S3TP::onError(int error, void * params) {
     //TODO: implement
 }
 
-void S3TP::onSynchronization() {
-    pthread_mutex_lock(&s3tp_mutex);
-    if (syncScheduled) {
-        // Not going to sync forever. After first sync we set the sync off
-        syncScheduled = false;
-    } else {
-        // Didn't receive any previous sync request (and sync wasn't self-initiated),
-        // so we respond with another sync
-        synchronizeStatus();
+void S3TP::onSynchronization(uint8_t syncId) {
+    if (syncId == S3TP_SYNC_INITIATOR) {
+        // Sync init received. so we respond with an ack sync
+        synchronizeStatus(S3TP_SYNC_ACK);
     }
-    pthread_mutex_unlock(&s3tp_mutex);
+    //Otherwise don't care about the sync, as it simply an ack
 }
