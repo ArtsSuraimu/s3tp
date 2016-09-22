@@ -51,12 +51,11 @@ private:
     pthread_cond_t assembly_cond;
     pthread_mutex_t s3tp_mutex;
     bool active;
-    bool syncScheduled;
     Transceiver::Backend * transceiver;
 
     //Generic methods
     void reset();
-    void synchronizeStatus();
+    void synchronizeStatus(uint8_t syncId);
 
     //TxModule
     TxModule tx;
@@ -80,7 +79,7 @@ private:
     virtual void onLinkStatusChanged(bool active);
     virtual void onChannelStatusChanged(uint8_t channel, bool active);
     virtual void onError(int error, void * params);
-    virtual void onSynchronization();
+    virtual void onSynchronization(uint8_t syncId);
 };
 
 
