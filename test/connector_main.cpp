@@ -2,7 +2,7 @@
 // Created by Lorenzo Donini on 01/09/16.
 //
 
-#include "../connector/S3tpConnector.h"
+#include <s3tp/connector/S3tpConnector.h>
 #include <csignal>
 
 /*
