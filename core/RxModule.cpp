@@ -88,8 +88,11 @@ void RxModule::handleLinkStatus(bool linkStatus) {
 
 void RxModule::handleBufferEmpty(int channel) {
     //The channel queue is not full anymore, so we can start writing on it again
-    LOG_DEBUG(std::string("Channel is now empty again: " + std::to_string(channel)));
-    //TODO: implement
+    pthread_mutex_lock(&rx_mutex);
+    if (statusInterface != NULL) {
+        statusInterface->onChannelStatusChanged((uint8_t)channel, true);
+    }
+    pthread_mutex_unlock(&rx_mutex);
 }
 
 int RxModule::openPort(uint8_t port) {
