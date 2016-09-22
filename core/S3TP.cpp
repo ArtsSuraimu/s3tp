@@ -307,6 +307,10 @@ void S3TP::onLinkStatusChanged(bool active) {
     }
 }
 
+void S3TP::onChannelStatusChanged(uint8_t channel, bool active) {
+    tx.setChannelAvailable(channel, active);
+}
+
 void S3TP::onError(int error, void * params) {
     //TODO: implement
 }

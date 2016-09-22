@@ -8,6 +8,7 @@
 class StatusInterface {
 public:
     virtual void onLinkStatusChanged(bool active) = 0;
+    virtual void onChannelStatusChanged(uint8_t channel, bool active) = 0;
     virtual void onError(int error, void * params) = 0;
     virtual void onSynchronization() = 0;
 };
