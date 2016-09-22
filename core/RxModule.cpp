@@ -151,6 +151,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     S3TP_MESSAGE_TYPE type = hdr->getMessageType();
     if (type == S3TP_MSG_SYNC) {
         S3TP_SYNC * sync = (S3TP_SYNC*)packet->getPayload();
+        LOG_DEBUG("RX: Sync Packet received");
         synchronizeStatus(*sync);
         return CODE_SUCCESS;
     } else if (type != S3TP_MSG_DATA) {
@@ -199,6 +200,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
 }
 
 void RxModule::synchronizeStatus(S3TP_SYNC& sync) {
+    pthread_mutex_lock(&rx_mutex);
     to_consume_global_seq = sync.tx_global_seq;
     for (int i=0; i<DEFAULT_MAX_OUT_PORTS; i++) {
         if (sync.port_seq[i] != 0) {
@@ -206,7 +208,9 @@ void RxModule::synchronizeStatus(S3TP_SYNC& sync) {
         }
     }
     //Notify main module
+    LOG_DEBUG("Receiver sequences synchronized correctly");
     statusInterface->onSynchronization();
+    pthread_mutex_unlock(&rx_mutex);
 }
 
 bool RxModule::isCompleteMessageForPortAvailable(int port) {
