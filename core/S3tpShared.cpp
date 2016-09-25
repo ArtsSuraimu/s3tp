@@ -90,7 +90,7 @@ AppControlMessageType safeMessageTypeInterpretation(uint8_t val) {
     } else if (count_high <= 1) {
         return NACK;
     } else if (count_low <= 1) {
-        return BUFFER_EMPTY;
+        return AVAILABLE;
     }
     return RESERVED;
 }

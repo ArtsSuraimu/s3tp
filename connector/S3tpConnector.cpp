@@ -326,7 +326,7 @@ bool S3tpConnector::receiveControlMessage(S3TP_CONTROL& control) {
             //The type of error is not relevant, as we just cannot write the message
             s3tpBufferFull = true;
             break;
-        case BUFFER_EMPTY:
+        case AVAILABLE:
             s3tpBufferFull = false;
             break;
         default:

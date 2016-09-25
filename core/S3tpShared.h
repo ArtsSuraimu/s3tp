@@ -53,7 +53,7 @@
 enum AppControlMessageType : uint8_t {
     ACK = 0x00,
     NACK = 0x0F,
-    BUFFER_EMPTY = 0xF0,
+    AVAILABLE = 0xF0,
     RESERVED = 0xFF
 };
 
