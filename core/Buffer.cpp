@@ -98,6 +98,19 @@ S3TP_PACKET * Buffer::getNextAvailablePacket() {
     return packet;
 }
 
+int Buffer::getSizeOfQueue(uint8_t port) {
+    pthread_mutex_lock(&buffer_mutex);
+    PriorityQueue<S3TP_PACKET*> * queue = queues[port];
+    if (queue == NULL) {
+        pthread_mutex_unlock(&buffer_mutex);
+        return 0;
+    }
+    int res = queue->getSize();
+    pthread_mutex_unlock(&buffer_mutex);
+
+    return res;
+}
+
 S3TP_PACKET * Buffer::popPacketInternal(int port) {
     PriorityQueue<S3TP_PACKET*> * queue = queues[port];
     if (queue == NULL || queue->isEmpty()) {

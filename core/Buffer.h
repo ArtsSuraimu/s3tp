@@ -17,6 +17,7 @@ public:
     PriorityQueue<S3TP_PACKET *> * getQueue(int port);
     S3TP_PACKET * getNextPacket(int port);
     S3TP_PACKET * getNextAvailablePacket();
+    int getSizeOfQueue(uint8_t port);
     void clear();
 
 private:
