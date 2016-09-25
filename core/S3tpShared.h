@@ -44,17 +44,14 @@
 #define CODE_SERVER_INTERNAL_ERROR -13
 
 /*
- * Definition of ack/nack bytes, sent from server to client
+ * Definition of control message types (including ack/nack bytes)
  */
-#define APP_MESSAGE_ACK 0x00
-#define APP_MESSAGE_NACK 0xFF
-
-/*
- * Definition of message type
- */
-#define APP_DATA_MESSAGE 0x00
-#define APP_CONTROL_MESSAGE 0xFF
-
+enum AppControlMessageType : uint8_t {
+    ACK = 0x00,
+    NACK = 0x0F,
+    BUFFER_EMPTY = 0xF0,
+    RESERVED = 0xFF
+};
 
 #define SAFE_TRANSMISSION_COUNT 3
 
@@ -77,13 +74,11 @@ typedef struct tag_s3tp_config {
     }
 }S3TP_CONFIG;
 
-typedef uint8_t S3TP_MESSAGE_TYPE;
-typedef uint8_t ACKNOWLEDGEMENT;
-typedef uint8_t S3TP_ERROR;
+typedef uint8_t S3tpError;
 
 typedef struct tag_s3tp_control {
-    ACKNOWLEDGEMENT ack;
-    S3TP_ERROR error;
+    AppControlMessageType controlMessageType;
+    S3tpError error;
 }S3TP_CONTROL;
 
 typedef struct tag_s3tp_length_redundant {
@@ -101,5 +96,6 @@ extern char * socket_path;
 int read_length_safe(int fd, size_t * out_length);
 int write_length_safe(int fd, size_t len);
 uint8_t safe_bool_interpretation(uint8_t val);
+AppControlMessageType safeMessageTypeInterpretation(uint8_t val);
 
 #endif //S3TP_S3TP_SHARED_H
