@@ -8,6 +8,7 @@
 #include "Constants.h"
 #include "Buffer.h"
 #include "utilities.h"
+#include "StatusInterface.h"
 #include <map>
 #include <trctrl/LinkInterface.h>
 #include <set>
@@ -35,6 +36,7 @@ public:
     int enqueuePacket(S3TP_PACKET * packet, uint8_t frag_no, bool more_fragments, uint8_t spi_channel, uint8_t options);
     void reset();
     void scheduleSync(uint8_t syncId);
+    void setStatusInterface(StatusInterface * statusInterface);
 
     //Public channel and link methods
     void notifyLinkAvailability(bool available);
@@ -51,6 +53,7 @@ private:
     bool sendingFragments;
     uint8_t currentPort;
     Transceiver::LinkInterface * linkInterface;
+    StatusInterface * statusInterface;
 
     //Sync variables
     bool scheduled_sync;

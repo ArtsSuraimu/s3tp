@@ -67,6 +67,12 @@ void TxModule::synchronizeStatus() {
     linkInterface->sendFrame(arq, syncPacket.channel, syncPacket.packet, syncPacket.getLength());
 }
 
+void TxModule::setStatusInterface(StatusInterface * statusInterface) {
+    pthread_mutex_lock(&tx_mutex);
+    this->statusInterface = statusInterface;
+    pthread_mutex_unlock(&tx_mutex);
+}
+
 //Private methods
 void TxModule::txRoutine() {
     pthread_mutex_lock(&tx_mutex);
@@ -130,8 +136,16 @@ void TxModule::txRoutine() {
         //TODO: check if sendFrame failed. If yes, need to blacklist channel
         linkInterface->sendFrame(arq, packet->channel, packet->packet, packet->getLength());
         //TODO: save in history queue (once implemented)
-        delete packet;
+
+        //Since a packet was just popped from the buffer, the queue is definitely available
+        if (outBuffer->getSizeOfQueue(hdr->getPort()) + 1 == MAX_QUEUE_SIZE
+            && statusInterface != nullptr) {
+            statusInterface->onOutputQueueAvailable(hdr->getPort());
+        }
+
         pthread_mutex_lock(&tx_mutex);
+
+        delete packet;
     }
     pthread_mutex_unlock(&tx_mutex);
 
@@ -181,9 +195,7 @@ TxModule::STATE TxModule::getCurrentState() {
 }
 
 bool TxModule::isQueueAvailable(uint8_t port, uint8_t no_packets) {
-    PriorityQueue<S3TP_PACKET *> * queue = outBuffer->getQueue(port);
-
-    return queue->getSize() + no_packets <= MAX_QUEUE_SIZE;
+    return outBuffer->getSizeOfQueue(port) + no_packets <= MAX_QUEUE_SIZE;
 }
 
 void TxModule::setChannelAvailable(uint8_t channel, bool available) {
