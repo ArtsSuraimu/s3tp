@@ -16,7 +16,7 @@
 #define TX_PARAM_CUSTOM 0x02
 #define CODE_INACTIVE_ERROR -1
 
-#define DEFAULT_SYNC_CHANNEL 3
+#define DEFAULT_SYNC_CHANNEL 0
 
 class TxModule : public PolicyActor<S3TP_PACKET *> {
 public:
