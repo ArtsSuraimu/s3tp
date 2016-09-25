@@ -88,7 +88,7 @@ void Client::kill() {
 
 int Client::send(const void * data, size_t len) {
     ssize_t wr;
-    S3TP_MESSAGE_TYPE type = APP_DATA_MESSAGE;
+    AppMessageType type = APP_DATA_MESSAGE;
 
     //Sending message type first
     wr = write(socket, &type, sizeof(type));
@@ -126,32 +126,41 @@ int Client::send(const void * data, size_t len) {
     return CODE_SUCCESS;
 }
 
-void Client::acknowledgeMessage(S3TP_CONTROL ack) {
-    S3TP_MESSAGE_TYPE type = APP_CONTROL_MESSAGE;
-    ssize_t wr = write(socket, &type, sizeof(type));
+int Client::sendControlMessage(S3TP_CONTROL message) {
+    ssize_t wr;
+    AppMessageType msgType = APP_CONTROL_MESSAGE;
+
+    //Sending message type first
+    wr = write(socket, &msgType, sizeof(msgType));
     if (wr == CODE_ERROR_SOCKET_NO_CONN) {
         LOG_WARN(std::string("Connection was closed by s3tp client " + std::to_string(socket)));
         handleConnectionClosed();
+        return CODE_ERROR_SOCKET_NO_CONN;
     } else if (wr < 0) {
         LOG_WARN(std::string("Error while writing on socket " + std::to_string(socket)));
         closeConnection();
+        return CODE_ERROR_SOCKET_WRITE;
     }
 
-    wr = write(socket, &ack, sizeof(ack));
-    if (wr == CODE_ERROR_SOCKET_NO_CONN) {
+    //Sending control message
+    wr = write(socket, &message, sizeof(S3TP_CONTROL));
+    if (wr == 0) {
         LOG_WARN(std::string("Connection was closed by s3tp client " + std::to_string(socket)));
         handleConnectionClosed();
+        return CODE_ERROR_SOCKET_NO_CONN;
     } else if (wr < 0) {
-        LOG_WARN(std::string("Error while writing on socket " + std::to_string(socket)));
+        LOG_WARN(std::string("Error while writing data on socket " + std::to_string(socket)));
         closeConnection();
+        return CODE_ERROR_SOCKET_WRITE;
     }
+    return CODE_SUCCESS;
 }
 
 void Client::clientRoutine() {
     ssize_t i = 0, rd = 0;
     size_t len = 0;
     int error = 0;
-    S3TP_MESSAGE_TYPE type;
+    AppMessageType type;
     S3TP_CONTROL control;
 
     LOG_DEBUG(std::string("Started client thread for socket " + std::to_string(socket)));
@@ -163,7 +172,7 @@ void Client::clientRoutine() {
             handleConnectionClosed();
             break;
         }
-        //TODO: handle logic for reading control messages
+        //TODO: handle logic for reading control messages, maybe not needed
         error = read_length_safe(socket, &len);
         if (error == CODE_ERROR_SOCKET_NO_CONN) {
             LOG_INFO(std::string("Client closed socket " + std::to_string(socket)));
@@ -228,15 +237,14 @@ void Client::clientRoutine() {
         if (result != CODE_SUCCESS) {
             LOG_INFO(std::string("Cannot transmit message to port " + std::to_string((int)app_port)
                                  + ". Error code: " + std::to_string(result)));
-            control.ack = APP_MESSAGE_NACK;
-            control.error = (S3TP_ERROR) result;
-            acknowledgeMessage(control);
+            control.controlMessageType = ACK;
+            control.error = (S3tpError) result;
         } else {
             LOG_DEBUG(std::string("Sending ack to port " + std::to_string((int)app_port)));
-            control.ack = APP_MESSAGE_ACK;
+            control.controlMessageType = NACK;
             control.error = 0;
-            acknowledgeMessage(control);
         }
+        sendControlMessage(control);
 
         if (result < 0) {
             LOG_ERROR(std::string("Error while communicating with s3tp module " + std::to_string(socket)));
