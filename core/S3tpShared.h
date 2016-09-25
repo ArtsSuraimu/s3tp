@@ -43,6 +43,10 @@
 #define CODE_SERVER_QUEUE_FULL -12
 #define CODE_SERVER_INTERNAL_ERROR -13
 
+
+#define APP_DATA_MESSAGE 0x00
+#define APP_CONTROL_MESSAGE 0xFF
+
 /*
  * Definition of control message types (including ack/nack bytes)
  */
@@ -74,6 +78,7 @@ typedef struct tag_s3tp_config {
     }
 }S3TP_CONFIG;
 
+typedef uint8_t AppMessageType;
 typedef uint8_t S3tpError;
 
 typedef struct tag_s3tp_control {
