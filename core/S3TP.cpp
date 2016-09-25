@@ -351,3 +351,18 @@ void S3TP::onSynchronization(uint8_t syncId) {
     }
     //Otherwise don't care about the sync, as it simply an ack
 }
+
+void S3TP::onOutputQueueAvailable(uint8_t port) {
+    pthread_mutex_lock(&clients_mutex);
+
+    std::map<uint8_t, Client*>::iterator it = clients.find(port);
+    if (it != clients.end()) {
+        S3TP_CONTROL control;
+        control.controlMessageType = AVAILABLE;
+        control.error = 0;
+
+        it->second->sendControlMessage(control);
+    }
+
+    pthread_mutex_unlock(&clients_mutex);
+}

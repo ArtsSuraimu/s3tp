@@ -81,6 +81,7 @@ private:
     virtual void onChannelStatusChanged(uint8_t channel, bool active);
     virtual void onError(int error, void * params);
     virtual void onSynchronization(uint8_t syncId);
+    virtual void onOutputQueueAvailable(uint8_t port);
 };
 
 
