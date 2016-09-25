@@ -148,7 +148,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         return CODE_ERROR_CRC_INVALID;
     }
 
-    S3TP_MESSAGE_TYPE type = hdr->getMessageType();
+    S3TP_MSG_TYPE type = hdr->getMessageType();
     if (type == S3TP_MSG_SYNC) {
         S3TP_SYNC * sync = (S3TP_SYNC*)packet->getPayload();
         LOG_DEBUG("RX: Sync Packet received");
