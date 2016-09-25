@@ -39,9 +39,10 @@ private:
     int socketDescriptor;
     bool connected;
     bool lastMessageAck;
+    bool s3tpBufferFull;
     std::mutex connector_mutex;
     std::thread listener_thread;
-    std::condition_variable ack_cond;
+    std::condition_variable status_cond;
     S3TP_CONFIG config;
     S3tpCallback * callback;
 
