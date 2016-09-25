@@ -5,6 +5,8 @@
 #include "S3tpConnector.h"
 
 S3tpConnector::S3tpConnector() {
+    lastMessageAck = false;
+    s3tpBufferFull = false;
     connected = false;
 }
 
@@ -90,7 +92,7 @@ int S3tpConnector::init(S3TP_CONFIG config, S3tpCallback * callback) {
 int S3tpConnector::send(const void * data, size_t len) {
     ssize_t wr;
     int error = 0;
-    S3TP_MESSAGE_TYPE type = APP_DATA_MESSAGE;
+    AppMessageType type = APP_DATA_MESSAGE;
 
     if (!isConnected()) {
         LOG_ERROR("Trying to write on closed channel. Sutting down");
@@ -115,21 +117,25 @@ int S3tpConnector::send(const void * data, size_t len) {
     }
 
     std::unique_lock<std::mutex> lock(connector_mutex);
-    wr = write(socketDescriptor, data, len);
-    if (wr <= 0) {
-        LOG_WARN("Error while writing to S3TP socket");
+    do {
+        wr = write(socketDescriptor, data, len);
+        if (wr <= 0) {
+            LOG_WARN("Error while writing to S3TP socket");
 
-        return CODE_ERROR_SOCKET_WRITE;
-    }
+            return CODE_ERROR_SOCKET_WRITE;
+        }
 
-    LOG_DEBUG(std::string("Written " + std::to_string(wr) + " bytes to S3TP"));
+        LOG_DEBUG(std::string("Written " + std::to_string(wr) + " bytes to S3TP"));
 
-    ack_cond.wait(lock);
-    if (!lastMessageAck) {
-        LOG_DEBUG("Received NACK from S3TP");
-        return CODE_SERVER_QUEUE_FULL;
-    }
+        //Waiting for asynchronous response
+        status_cond.wait(lock);
+        if (!lastMessageAck) {
+            LOG_DEBUG("Received NACK from S3TP. Queue is currently full");
+        }
+    } while(s3tpBufferFull);
+
     LOG_DEBUG("Received ACK from S3TP");
+
     return (int)wr;
 }
 
@@ -258,13 +264,13 @@ void S3tpConnector::closeConnection() {
  */
 void S3tpConnector::asyncListener() {
     ssize_t rd;
-    S3TP_MESSAGE_TYPE type;
+    AppMessageType type;
     S3TP_CONTROL control;
 
     LOG_DEBUG("Started Client async listener thread");
 
     while (isConnected()) {
-        rd = read(socketDescriptor, &type, sizeof(S3TP_MESSAGE_TYPE));
+        rd = read(socketDescriptor, &type, sizeof(AppMessageType));
         if (rd == 0) {
             //Socket was already closed
             LOG_WARN("Connection to S3TP was closed by server");
@@ -277,15 +283,11 @@ void S3tpConnector::asyncListener() {
             closeConnection();
             break;
         }
-        type = safe_bool_interpretation(type);
+        type = safeMessageTypeInterpretation(type);
         if (type == APP_CONTROL_MESSAGE) {
             if (!receiveControlMessage(control)) {
                 break;
             }
-            connector_mutex.lock();
-            lastMessageAck = safe_bool_interpretation(control.ack) == APP_MESSAGE_ACK;
-            connector_mutex.unlock();
-            ack_cond.notify_all();
         } else if (type == APP_DATA_MESSAGE) {
             if (!receiveDataMessage()) {
                 break;
@@ -311,6 +313,27 @@ bool S3tpConnector::receiveControlMessage(S3TP_CONTROL& control) {
         closeConnection();
         return false;
     }
+
+    //Now checking the actual contents of the control message
+    AppControlMessageType type = safeMessageTypeInterpretation(control.controlMessageType);
+    connector_mutex.lock();
+    switch (type) {
+        case ACK:
+            lastMessageAck = true;
+            break;
+        case NACK:
+            lastMessageAck = false;
+            //The type of error is not relevant, as we just cannot write the message
+            s3tpBufferFull = true;
+            break;
+        case BUFFER_EMPTY:
+            s3tpBufferFull = false;
+            break;
+        default:
+            break;
+    }
+    status_cond.notify_all();
+    connector_mutex.unlock();
     return true;
 }
 
