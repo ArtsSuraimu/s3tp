@@ -275,6 +275,19 @@ int S3TP::checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t 
     return CODE_SUCCESS;
 }
 
+void S3TP::notifyAvailabilityToClients() {
+    S3TP_CONTROL control;
+    control.controlMessageType = AVAILABLE;
+    control.error = 0;
+
+    //Notifies all clients
+    pthread_mutex_lock(&clients_mutex);
+    for (auto const &it : clients) {
+        it.second->sendControlMessage(control);
+    }
+    pthread_mutex_unlock(&clients_mutex);
+}
+
 /*
  * Client Interface logic
  */
@@ -307,11 +320,24 @@ void S3TP::onLinkStatusChanged(bool active) {
     tx.notifyLinkAvailability(active);
     if (active) {
         synchronizeStatus(S3TP_SYNC_INITIATOR);
+        notifyAvailabilityToClients();
     }
 }
 
 void S3TP::onChannelStatusChanged(uint8_t channel, bool active) {
     tx.setChannelAvailable(channel, active);
+
+    S3TP_CONTROL control;
+    control.controlMessageType = AVAILABLE;
+    control.error = 0;
+    //Notify previously blocked clients
+    pthread_mutex_lock(&clients_mutex);
+    for (auto const &it : clients) {
+        if (it.second->getVirtualChannel() == channel) {
+            it.second->sendControlMessage(control);
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
 }
 
 void S3TP::onError(int error, void * params) {
