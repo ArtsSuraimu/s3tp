@@ -17,7 +17,8 @@
 #define S3TP_SYNC_INITIATOR 0x00
 #define S3TP_SYNC_ACK 0xFF
 
-#define S3TP_VIRTUAL_CHANNELS 8
+//Eigth channel should be reserved for now
+#define S3TP_VIRTUAL_CHANNELS 7
 
 typedef int SOCKET;
 typedef uint8_t S3TP_MSG_TYPE;
