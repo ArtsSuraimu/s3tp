@@ -67,3 +67,30 @@ uint8_t safe_bool_interpretation(uint8_t val) {
         return 0x00;
     }
 }
+
+AppControlMessageType safeMessageTypeInterpretation(uint8_t val) {
+    int i=0;
+    int count_low = 0, count_high = 0;
+    for (i = 0; i < 4; i++) {
+        if ((val % 2) != 0) {
+            //First bit is 1
+            count_low++;
+        }
+        val = val >> 1;
+    }
+    for (i = 0; i < 4; i++) {
+        if ((val % 2) != 0) {
+            //First bit is 1
+            count_high++;
+        }
+        val = val >> 1;
+    }
+    if (count_low <= 1 && count_high <= 1) {
+        return ACK; //Must be 0
+    } else if (count_high <= 1) {
+        return NACK;
+    } else if (count_low <= 1) {
+        return BUFFER_EMPTY;
+    }
+    return RESERVED;
+}
