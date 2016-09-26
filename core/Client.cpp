@@ -237,11 +237,11 @@ void Client::clientRoutine() {
         if (result != CODE_SUCCESS) {
             LOG_INFO(std::string("Cannot transmit message to port " + std::to_string((int)app_port)
                                  + ". Error code: " + std::to_string(result)));
-            control.controlMessageType = ACK;
+            control.controlMessageType = NACK;
             control.error = (S3tpError) result;
         } else {
             LOG_DEBUG(std::string("Sending ack to port " + std::to_string((int)app_port)));
-            control.controlMessageType = NACK;
+            control.controlMessageType = ACK;
             control.error = 0;
         }
         sendControlMessage(control);
