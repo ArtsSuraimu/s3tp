@@ -32,10 +32,10 @@ int main(int argc, char ** argv) {
         Transceiver::FireTcpPair pairs[S3TP_VIRTUAL_CHANNELS];
         std::cout << "Created config for [port:channel]: ";
         for (int i=0; i < S3TP_VIRTUAL_CHANNELS; i++) {
-            pairs[i].port = start_port + (i+2);
+            pairs[i].port = start_port + (i*2);
             pairs[i].channel = i;
             config.mappings.push_back(pairs[i]);
-            std::cout << start_port + (i+2) << ":" << i << " ";
+            std::cout << start_port + (i*2) << ":" << i << " ";
         }
         std::cout << std::endl;
     } else {
