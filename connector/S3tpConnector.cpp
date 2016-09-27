@@ -100,24 +100,24 @@ int S3tpConnector::send(const void * data, size_t len) {
         return CODE_ERROR_SOCKET_NO_CONN;
     }
 
-    //Send message type first
-    wr = write(socketDescriptor, &type, sizeof(type));
-    if (wr <= 0) {
-        LOG_WARN("Error while writing to S3TP socket");
-
-        return CODE_ERROR_SOCKET_WRITE;
-    }
-
-    //Send message lengths
-    error = write_length_safe(socketDescriptor, len);
-    if (error == CODE_ERROR_SOCKET_WRITE) {
-        LOG_WARN("Error while writing on S3TP socket");
-
-        return error;
-    }
-
     std::unique_lock<std::mutex> lock(connector_mutex);
     do {
+        //Send message type first
+        wr = write(socketDescriptor, &type, sizeof(type));
+        if (wr <= 0) {
+            LOG_WARN("Error while writing to S3TP socket");
+
+            return CODE_ERROR_SOCKET_WRITE;
+        }
+
+        //Send message lengths
+        error = write_length_safe(socketDescriptor, len);
+        if (error == CODE_ERROR_SOCKET_WRITE) {
+            LOG_WARN("Error while writing on S3TP socket");
+
+            return error;
+        }
+
         wr = write(socketDescriptor, data, len);
         if (wr <= 0) {
             LOG_WARN("Error while writing to S3TP socket");
@@ -129,10 +129,18 @@ int S3tpConnector::send(const void * data, size_t len) {
 
         //Waiting for asynchronous response
         status_cond.wait(lock);
-        if (!lastMessageAck) {
-            LOG_DEBUG("Received NACK from S3TP. Queue is currently full");
+        if (!connected) {
+            LOG_DEBUG("Discnnected from S3TP");
+            return CODE_ERROR_SOCKET_NO_CONN;
         }
-    } while(s3tpBufferFull);
+
+        if (lastMessageAck && !s3tpBufferFull) {
+            //ACK was received correctly
+            break;
+        }
+        LOG_DEBUG("Received NACK from S3TP. Queue is currently full. Waiting till queue can be written again");
+        status_cond.wait(lock);
+    } while(connected);
 
     LOG_DEBUG("Received ACK from S3TP");
 
@@ -256,6 +264,7 @@ void S3tpConnector::closeConnection() {
         LOG_INFO(std::string("Closed connector (socket " + std::to_string(socketDescriptor) + ")"));
     }
     connected = false;
+    status_cond.notify_all();
     connector_mutex.unlock();
 }
 
