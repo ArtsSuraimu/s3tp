@@ -20,5 +20,5 @@ install(DIRECTORY core/ DESTINATION include/s3tp/s3tp/core)
 install(TARGETS s3tp LIBRARY DESTINATION lib/s3tp)
 install(FILES s3tp-config.cmake DESTINATION lib/s3tp)
 
-add_subdirectory(test)
+#add_subdirectory(test)
 #add_subdirectory(debug)

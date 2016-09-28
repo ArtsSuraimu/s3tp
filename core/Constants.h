@@ -12,7 +12,7 @@
 
 #include <cstdint>
 #include <cstring>
-#include <s3tp/core/S3tpShared.h>
+#include "S3tpShared.h"
 
 #define ETH_S3TP 0xBEEF
 #define MTU 1021
@@ -29,7 +29,7 @@
 #define DEFAULT_MAX_IN_PORTS 128
 #define DEFAULT_MAX_OUT_PORTS 128
 
-#define DEFAULT_MAX_FRAGMENTS 256
+#define DEFAULT_MAX_FRAGMENTS 128
 #define MAX_PDU_LENGTH (LEN_S3TP_PDU * DEFAULT_MAX_FRAGMENTS)
 //#define DEFAULT_MAX_PDU_LENGTH (1 << 16)
 

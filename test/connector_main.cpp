@@ -52,6 +52,7 @@ int main(int argc, char* argv[]) {
     connector.init(config, &callback);
     sleep(1);
 
+    int i=0;
     while (connector.isConnected()) {
         std::cout << "Please insert a message to send: \n";
         std::getline(std::cin, testS);
@@ -59,6 +60,14 @@ int main(int argc, char* argv[]) {
             break;
         }
         connector.send((void *)testS.data(), testS.length());
+
+        /*if ((i % 128) == 0) {
+            sleep(20);
+        }
+        testS = "thisisarandomlonglongteststringwhichweneedfortestingpackets";
+        connector.send((void *)testS.data(), testS.length());
+        i++;
+        sleep(1);*/
     }
 
     connector.closeConnection();
