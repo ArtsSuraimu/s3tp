@@ -22,7 +22,8 @@
 #define CODE_ERROR_PORT_CLOSED -5
 #define CODE_ERROR_INCONSISTENT_STATE -6
 
-#define MAX_REORDERING_WINDOW 256
+#define MAX_REORDERING_WINDOW 128
+#define RECEIVING_WINDOW_SIZE 128
 
 class RxModule: public Transceiver::LinkCallback,
                         PolicyActor<S3TP_PACKET*> {
@@ -41,12 +42,14 @@ public:
     char * getNextCompleteMessage(uint16_t * len, int * error, uint8_t * port);
     virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
     virtual bool isElementValid(S3TP_PACKET * element);
+    virtual bool maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newElement);
     void reset();
 private:
     bool active;
     Buffer * inBuffer;
     uint8_t to_consume_global_seq;
-    uint32_t received_packets;
+    uint8_t receiving_window;
+    uint8_t lastReceivedGlobalSeq;
     pthread_mutex_t rx_mutex;
     pthread_cond_t available_msg_cond;
 
@@ -63,6 +66,7 @@ private:
     void handleLinkStatus(bool linkStatus);
     bool isPortOpen(uint8_t port);
     bool isCompleteMessageForPortAvailable(int port);
+    void flushQueues();
     //void consumeQueue(uint8_t port);
 };
 

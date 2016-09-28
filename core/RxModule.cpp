@@ -6,7 +6,8 @@
 
 RxModule::RxModule() {
     to_consume_global_seq = 0;
-    received_packets = 0;
+    receiving_window = 0;
+    lastReceivedGlobalSeq = to_consume_global_seq;
     pthread_mutex_init(&rx_mutex, NULL);
     pthread_cond_init(&available_msg_cond, NULL);
     inBuffer = new Buffer(this);
@@ -26,8 +27,9 @@ RxModule::~RxModule() {
 
 void RxModule::reset() {
     pthread_mutex_lock(&rx_mutex);
-    received_packets = 0;
+    receiving_window = 0;
     to_consume_global_seq = 0;
+    lastReceivedGlobalSeq = to_consume_global_seq;
     inBuffer->clear();
     current_port_sequence.clear();
     available_messages.clear();
@@ -43,7 +45,7 @@ void RxModule::setStatusInterface(StatusInterface * statusInterface) {
 
 void RxModule::startModule() {
     pthread_mutex_lock(&rx_mutex);
-    received_packets = 0;
+    receiving_window = 0;
     active = true;
     pthread_mutex_unlock(&rx_mutex);
 }
@@ -189,24 +191,34 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     pthread_mutex_unlock(&rx_mutex);
 
     //This variable doesn't need locking, as it is a purely internal counter
-    received_packets++;
-    if ((received_packets % 256) == 0) {
-        //Reordering window reached, flush queues?!
-        //TODO: check if overflowed
+    uint8_t relativeGlobSeq = (hdr->getGlobalSequence() - to_consume_global_seq);
+    if (relativeGlobSeq < RECEIVING_WINDOW_SIZE && relativeGlobSeq > lastReceivedGlobalSeq) {
+        lastReceivedGlobalSeq = hdr->getGlobalSequence();
     }
-    //TODO: copy metadata and seq numbers into respective vars and check if something becomes available
+    receiving_window++;
+    if (receiving_window >= RECEIVING_WINDOW_SIZE) {
+        //Update global sequence number and flush queues
+        LOG_DEBUG("Receiving window reached. Flushing queues now..");
+        flushQueues();
+        receiving_window = 0;
+    }
 
     return CODE_SUCCESS;
 }
 
 void RxModule::synchronizeStatus(S3TP_SYNC& sync) {
     pthread_mutex_lock(&rx_mutex);
-    to_consume_global_seq = sync.tx_global_seq;
     for (int i=0; i<DEFAULT_MAX_OUT_PORTS; i++) {
         if (sync.port_seq[i] != 0) {
             current_port_sequence[i] = sync.port_seq[i];
         }
     }
+    //TODO: clear useless stuff
+    //Check all queues and remove useless stuff
+    //uint8_t seq1 = sync.tx_global_seq - to_consume_global_seq;
+    //uint8_t seq2 = lastReceivedGlobalSeq - to_consume_global_seq;
+    lastReceivedGlobalSeq = sync.tx_global_seq;
+
     //Notify main module
     LOG_DEBUG("Receiver sequences synchronized correctly");
     statusInterface->onSynchronization(sync.syncId);
@@ -214,6 +226,7 @@ void RxModule::synchronizeStatus(S3TP_SYNC& sync) {
 }
 
 bool RxModule::isCompleteMessageForPortAvailable(int port) {
+    //Method is called internally, no need for locks
     PriorityQueue<S3TP_PACKET*> * q = inBuffer->getQueue(port);
     q->lock();
     PriorityQueue_node<S3TP_PACKET*> * node = q->getHead();
@@ -272,7 +285,8 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
         *len = 0;
         return NULL;
     }
-    //TODO: locks
+
+    pthread_mutex_lock(&rx_mutex);
     std::map<uint8_t, uint8_t>::iterator it = available_messages.begin();
     bool messageAssembled = false;
     std::vector<char> assembledData;
@@ -291,6 +305,8 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
         if (!hdr->moreFragments()) {
             *port = it->first;
             messageAssembled = true;
+            // Not updating the global sequence right away,
+            // as this will be done after the recv window has been filled
         }
     }
     //Message was assembled correctly, checking if there are further available messages
@@ -301,29 +317,48 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
     } else {
         available_messages.erase(it->first);
     }
+    //Increase global sequence
+    pthread_mutex_unlock(&rx_mutex);
     //Copying the entire data array, as vector memory will be released at end of function
     char * data = new char[assembledData.size()];
     memcpy(data, assembledData.data(), assembledData.size());
     return data;
 }
 
+void RxModule::flushQueues() {
+    std::set<int> activeQueues = inBuffer->getActiveQueues();
+    uint8_t pktGlobalSequence;
+    //Will flush only queues which currently hold data
+    for (auto port : activeQueues) {
+        PriorityQueue<S3TP_PACKET*>* queue = inBuffer->getQueue(port);
+        if (queue->isEmpty()) {
+            LOG_DEBUG("WTF????");
+            //TODO: there's some serious error here
+            continue;
+        }
+        S3TP_PACKET * packet = queue->peek();
+        pktGlobalSequence = packet->getHeader()->getGlobalSequence() - to_consume_global_seq;
+        if (pktGlobalSequence >= MAX_REORDERING_WINDOW) {
+            // pktGlobalSequence < glob_seq
+            // Packet is too old, clearing the queue
+            inBuffer->clearQueueForPort((uint8_t) port);
+            //TODO: send error to application
+            continue;
+        }
+    }
+
+    //Updating current global sequence
+    /*if (highestReceivedGlobalSeq - MAX_REORDERING_WINDOW != to_consume_global_seq) {
+        LOG_INFO("Packets were lost somewhere...");
+    }*/
+    to_consume_global_seq = lastReceivedGlobalSeq;
+}
+
 int RxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     int comp = 0;
     uint8_t seq1, seq2, offset;
     pthread_mutex_lock(&rx_mutex);
-    offset = to_consume_global_seq;
-    //First check global seq number for comparison
-    seq1 = element1->getHeader()->getGlobalSequence() - offset;
-    seq2 = element2->getHeader()->getGlobalSequence() - offset;
-    if (seq1 < seq2) {
-        comp = -1; //Element 1 is lower, hence has higher priority
-    } else if (seq1 > seq2) {
-        comp = 1; //Element 2 is lower, hence has higher priority
-    }
-    if (comp != 0) {
-        pthread_mutex_unlock(&rx_mutex);
-        return comp;
-    }
+
     offset = current_port_sequence[element1->getHeader()->getPort()];
     seq1 = element1->getHeader()->seq_port - offset;
     seq2 = element2->getHeader()->seq_port - offset;
@@ -339,4 +374,16 @@ int RxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
 bool RxModule::isElementValid(S3TP_PACKET * element) {
     //Not needed for Rx Module. Return true by default
     return true;
+}
+
+bool RxModule::maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newElement) {
+    uint8_t offset, headSeq, newSeq;
+
+    pthread_mutex_lock(&rx_mutex);
+    offset = to_consume_global_seq;
+    headSeq = queueHead->getHeader()->getGlobalSequence() - offset;
+    newSeq = newElement->getHeader()->getGlobalSequence() - offset;
+    pthread_mutex_unlock(&rx_mutex);
+
+    return abs(newSeq - headSeq) > MAX_REORDERING_WINDOW;
 }
