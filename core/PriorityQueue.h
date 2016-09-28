@@ -40,6 +40,7 @@ public:
 	int push(T element, PolicyActor<T> * comparator);
 	uint32_t computeBufferSize();
 	uint16_t getSize();
+	void clear();
 	void lock();
 	void unlock();
 	PriorityQueue_node<T> * getHead();
@@ -76,14 +77,7 @@ PriorityQueue<T>::PriorityQueue() :
 
 template <typename T>
 PriorityQueue<T>::~PriorityQueue() {
-	pthread_mutex_lock(&q_mutex);
-	PriorityQueue_node<T> * ref = head;
-	while (ref != NULL) {
-		head = ref->next;
-		delete ref;
-		ref = head;
-	}
-	pthread_mutex_unlock(&q_mutex);
+	clear();
 	pthread_mutex_destroy(&q_mutex);
 }
 
@@ -208,6 +202,18 @@ uint16_t PriorityQueue<T>::getSize() {
 	uint16_t result = size;
 	pthread_mutex_unlock(&q_mutex);
 	return result;
+}
+
+template <typename T>
+void PriorityQueue<T>::clear() {
+	pthread_mutex_lock(&q_mutex);
+	PriorityQueue_node<T> * ref = head;
+	while (ref != NULL) {
+		head = ref->next;
+		delete ref;
+		ref = head;
+	}
+	pthread_mutex_unlock(&q_mutex);
 }
 
 template <typename T>
