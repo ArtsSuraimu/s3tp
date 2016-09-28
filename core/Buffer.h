@@ -7,6 +7,7 @@
 
 #include "PriorityQueue.h"
 #include <map>
+#include <set>
 
 class Buffer {
 public:
@@ -14,11 +15,13 @@ public:
     ~Buffer();
     bool packetsAvailable();
     int write(S3TP_PACKET * packet);
+    std::set<int> getActiveQueues();
     PriorityQueue<S3TP_PACKET *> * getQueue(int port);
     S3TP_PACKET * getNextPacket(int port);
     S3TP_PACKET * getNextAvailablePacket();
     int getSizeOfQueue(uint8_t port);
     void clear();
+    void clearQueueForPort(uint8_t port);
 
 private:
     PolicyActor<S3TP_PACKET *> * policyActor;

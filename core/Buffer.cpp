@@ -26,6 +26,16 @@ void Buffer::clear() {
     pthread_mutex_unlock(&buffer_mutex);
 }
 
+void Buffer::clearQueueForPort(uint8_t port) {
+    pthread_mutex_lock(&buffer_mutex);
+    std::map<int, PriorityQueue<S3TP_PACKET*>*>::iterator el = queues.find(port);
+    if (el != queues.end()) {
+        el->second->clear();
+    }
+    packet_counter.erase(port);
+    pthread_mutex_unlock(&buffer_mutex);
+}
+
 bool Buffer::packetsAvailable() {
     pthread_mutex_lock(&buffer_mutex);
     //Packets are available if message map is not empty
@@ -45,6 +55,12 @@ int Buffer::write(S3TP_PACKET * packet) {
         queue = new PriorityQueue<S3TP_PACKET*>();
         queues[port] = queue;
     }
+
+    if (!queue->isEmpty() && policyActor->maximumWindowExceeded(queue->peek(), packet)) {
+        //Clearing queue, since maximum window was exceeded
+        queue->clear();
+        packet_counter.erase(port);
+    }
     if (queue->push(packet, policyActor) == QUEUE_FULL) {
         LOG_INFO(std::string("Queue " + std::to_string(port)
                               + " full. Dropped packet with sequence number "
@@ -60,6 +76,20 @@ int Buffer::write(S3TP_PACKET * packet) {
     pthread_mutex_unlock(&buffer_mutex);
 
     return CODE_SUCCESS;
+}
+
+std::set<int> Buffer::getActiveQueues() {
+    std::set<int> result;
+
+    pthread_mutex_lock(&buffer_mutex);
+    for (auto const &it : packet_counter) {
+        if (it.second > 0) {
+            result.insert(it.first);
+        }
+    }
+    pthread_mutex_unlock(&buffer_mutex);
+
+    return result;
 }
 
 PriorityQueue<S3TP_PACKET *> * Buffer::getQueue(int port) {
