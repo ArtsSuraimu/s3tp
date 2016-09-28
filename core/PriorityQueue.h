@@ -213,6 +213,8 @@ void PriorityQueue<T>::clear() {
 		delete ref;
 		ref = head;
 	}
+	tail = head;
+	size = 0;
 	pthread_mutex_unlock(&q_mutex);
 }
 
