@@ -311,3 +311,8 @@ bool TxModule::isElementValid(S3TP_PACKET * element) {
     return _isChannelAvailable(element->channel);
 }
 
+bool TxModule::maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newElement) {
+    //Implementation not needed inside Tx Module
+    return false;
+}
+

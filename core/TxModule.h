@@ -78,6 +78,7 @@ private:
     //Policy Actor implementation
     virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
     virtual bool isElementValid(S3TP_PACKET * element);
+    virtual bool maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newElement);
 };
 
 #endif //S3TP_TXMODULE_H
