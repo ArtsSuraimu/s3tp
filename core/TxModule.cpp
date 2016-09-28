@@ -55,7 +55,12 @@ void TxModule::synchronizeStatus() {
     std::fill(syncStructure->port_seq, syncStructure->port_seq + DEFAULT_MAX_OUT_PORTS, 0);
     syncStructure->tx_global_seq = global_seq_num;
     for (std::map<uint8_t, uint8_t>::iterator it = port_sequence.begin(); it != port_sequence.end(); ++it) {
-        syncStructure->port_seq[it->first] = it->second;
+        S3TP_PACKET * pkt = outBuffer->peektNextPacket(it->first);
+        if (pkt != NULL) {
+            syncStructure->port_seq[it->first] = pkt->getHeader()->seq_port;
+        } else {
+            syncStructure->port_seq[it->first] = it->second;
+        }
     }
 
     S3TP_HEADER * hdr = syncPacket.getHeader();
@@ -63,7 +68,7 @@ void TxModule::synchronizeStatus() {
     hdr->crc = crc;
 
     bool arq = S3TP_ARQ;
-    LOG_DEBUG("TX: Sync Packet sent to receiver");
+    LOG_DEBUG("TX: ----------- Sync Packet sent to receiver -----------");
     linkInterface->sendFrame(arq, syncPacket.channel, syncPacket.packet, syncPacket.getLength());
 }
 
