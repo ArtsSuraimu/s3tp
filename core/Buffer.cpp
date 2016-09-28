@@ -103,6 +103,18 @@ PriorityQueue<S3TP_PACKET *> * Buffer::getQueue(int port) {
     return queue;
 }
 
+S3TP_PACKET * Buffer::peektNextPacket(int port) {
+    pthread_mutex_lock(&buffer_mutex);
+    S3TP_PACKET * packet = NULL;
+    PriorityQueue<S3TP_PACKET * >* queue = queues[port];
+    if (queue != NULL && !queue->isEmpty()) {
+        packet = queue->peek();
+    }
+    pthread_mutex_unlock(&buffer_mutex);
+
+    return packet;
+}
+
 S3TP_PACKET * Buffer::getNextPacket(int port) {
     pthread_mutex_lock(&buffer_mutex);
     S3TP_PACKET * packet = popPacketInternal(port);

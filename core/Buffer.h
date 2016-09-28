@@ -17,6 +17,7 @@ public:
     int write(S3TP_PACKET * packet);
     std::set<int> getActiveQueues();
     PriorityQueue<S3TP_PACKET *> * getQueue(int port);
+    S3TP_PACKET * peektNextPacket(int port);
     S3TP_PACKET * getNextPacket(int port);
     S3TP_PACKET * getNextAvailablePacket();
     int getSizeOfQueue(uint8_t port);
