@@ -11,7 +11,10 @@ TxModule::TxModule() {
     scheduled_sync = false;
     sendingFragments = false;
     active = false;
+    retransmissionRequired = false;
     currentPort = 0;
+    lastAcknowledgedSequence = 0;
+    retransmittedToSequence = 0;
 
     //Setting up unique sync packet
     syncPacket.channel = DEFAULT_RESERVED_CHANNEL;
@@ -136,8 +139,15 @@ void TxModule::txRoutine() {
                 scheduledAck = false;
             }
         }
+        //Packets need to be retransmitted
+        if (retransmissionRequired) {
+            state = RUNNING;
+            retransmitPackets();
+            retransmissionRequired = false;
+            continue;
+        }
         //Send normal data
-        if(!outBuffer->packetsAvailable()) {
+        if(!outBuffer->packetsAvailable() || safeQueue.size() == MAX_TRANSMISSION_WINDOW) {
             state = WAITING;
             pthread_cond_wait(&tx_cond, &tx_mutex);
             continue;
@@ -170,6 +180,10 @@ void TxModule::txRoutine() {
             global_seq_num++;
         }
         to_consume_port_seq[hdr->getPort()]++;
+
+        //Saving packet inside history queue
+        safeQueue.push_back(packet);
+
         pthread_mutex_unlock(&tx_mutex);
 
         LOG_DEBUG(std::string("TX: Packet sent from port " + std::to_string((int)hdr->getPort())
@@ -181,7 +195,6 @@ void TxModule::txRoutine() {
 
         //TODO: check if sendFrame failed. If yes, need to blacklist channel
         linkInterface->sendFrame(arq, packet->channel, packet->packet, packet->getLength());
-        //TODO: save in history queue (once implemented)
 
         //Since a packet was just popped from the buffer, the queue is definitely available
         if (outBuffer->getSizeOfQueue(hdr->getPort()) + 1 == MAX_QUEUE_SIZE
@@ -190,8 +203,6 @@ void TxModule::txRoutine() {
         }
 
         pthread_mutex_lock(&tx_mutex);
-
-        delete packet;
     }
     pthread_mutex_unlock(&tx_mutex);
 
@@ -219,8 +230,47 @@ void TxModule::scheduleAcknowledgement(uint8_t ackSequence) {
 
 void TxModule::notifyAcknowledgement(uint8_t ackSequence) {
     pthread_mutex_lock(&tx_mutex);
-    //TODO: implement
+    uint8_t globSeq, lastAcknowledged = _getRelativeGlobalSequence(ackSequence);
+    S3TP_PACKET * pkt;
+    S3TP_HEADER * hdr;
+
+    while (!safeQueue.empty()) {
+        pkt = safeQueue.front();
+        hdr = pkt->getHeader();
+        globSeq = _getRelativeGlobalSequence(hdr->getGlobalSequence());
+        if (globSeq <= lastAcknowledged) {
+            safeQueue.pop_front();
+            delete pkt;
+        } else if (global_seq_num - ackSequence >= DEFAULT_RECEIVING_WINDOW) {
+            //Some packets were not acknowledged, need to retransmit them
+            retransmissionRequired = true;
+            break;
+        }
+    }
+    pthread_cond_signal(&tx_cond);
     pthread_mutex_unlock(&tx_mutex);
+}
+
+void TxModule::retransmitPackets() {
+    S3TP_PACKET * pkt;
+    S3TP_HEADER * hdr;
+
+    while (!safeQueue.empty()) {
+        pkt = safeQueue.front();
+        pthread_mutex_unlock(&tx_mutex);
+
+        LOG_DEBUG(std::string("TX: Packet sent from port " + std::to_string((int)hdr->getPort())
+                              + " to Link Layer -> glob_seq: " + std::to_string((int)hdr->getGlobalSequence())
+                              + ", sub_seq: " + std::to_string((int)hdr->getSubSequence())
+                              + ", port_seq: " + std::to_string((int)hdr->seq_port)));
+
+        bool arq = pkt->options & S3TP_ARQ;
+
+        if (linkInterface->sendFrame(arq, pkt->channel, pkt->packet, pkt->getLength()) < 0) {
+            //Send frame failed. Either underlying buffer is full or channel is broken
+            //TODO: implement safety mechanism
+        }
+    }
 }
 
 void * TxModule::staticTxRoutine(void * args) {
@@ -349,6 +399,10 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
     pthread_cond_signal(&tx_cond);
 
     return CODE_SUCCESS;
+}
+
+uint8_t TxModule::_getRelativeGlobalSequence(uint8_t target) {
+    return target - lastAcknowledgedSequence;
 }
 
 int TxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {

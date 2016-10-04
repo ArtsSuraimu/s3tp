@@ -12,6 +12,7 @@
 #include <map>
 #include <trctrl/LinkInterface.h>
 #include <set>
+#include <queue>
 #include <sys/time.h>
 
 #define TX_PARAM_RECOVERY 0x01
@@ -76,10 +77,17 @@ private:
     uint8_t global_seq_num;
     Buffer * outBuffer;
 
+    //Safe output buffer
+    uint8_t lastAcknowledgedSequence;
+    bool retransmissionRequired;
+    uint8_t retransmittedToSequence;
+    std::deque<S3TP_PACKET *> safeQueue;
+
     void txRoutine();
     static void * staticTxRoutine(void * args);
     void synchronizeStatus();
     void sendAcknowledgement();
+    void retransmitPackets();
 
     //Internal methods for accessing channels (do not use locking)
     bool _channelsAvailable();
@@ -90,6 +98,9 @@ private:
     virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
     virtual bool isElementValid(S3TP_PACKET * element);
     virtual bool maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newElement);
+
+    //Utility
+    uint8_t _getRelativeGlobalSequence(uint8_t target);
 };
 
 #endif //S3TP_TXMODULE_H
