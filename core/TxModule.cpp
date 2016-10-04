@@ -106,6 +106,8 @@ void TxModule::setStatusInterface(StatusInterface * statusInterface) {
 //Private methods
 void TxModule::txRoutine() {
     struct timespec timeToWait;
+    timeToWait.tv_sec = SYNC_WAIT_TIME;
+    timeToWait.tv_nsec = 0;
 
     pthread_mutex_lock(&tx_mutex);
     while(active) {
@@ -122,8 +124,6 @@ void TxModule::txRoutine() {
                 synchronizeStatus();
                 scheduled_sync = false;
                 //Force synchronization
-                timeToWait.tv_sec = SYNC_WAIT_TIME;
-                timeToWait.tv_nsec = 0;
                 pthread_cond_timedwait(&tx_cond, &tx_mutex, &timeToWait);
             }
         }
