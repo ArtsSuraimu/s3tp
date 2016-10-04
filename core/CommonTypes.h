@@ -11,11 +11,10 @@
 #include <stdlib.h>
 #include "Constants.h"
 
-enum S3TP_MSG_TYPE : uint8_t {
-	DATA = 0x00,
-	T_ACK = 0x01,
-	SYNC = 0X03
-};
+//S3TP Header Flags
+#define S3TP_FLAG_DATA 0x01
+#define S3TP_FLAG_ACK 0x02
+#define S3TP_FLAG_SYNC 0x04
 
 #define S3TP_SYNC_INITIATOR 0x00
 #define S3TP_SYNC_ACK 0xFF
@@ -37,9 +36,10 @@ typedef int SOCKET;
  * 			PDU LENGTH			|  PORT_SEQ  |   PORT
  * ------------------------------------------------------
  *
- * Additionally, the last 2 bits of PDU_LENGTH are reserved to the protocol,
- * whilte the last bit of PORT contains the fragmentation bit.
+ * Additionally, the last 3 bits of PDU_LENGTH are reserved to the protocol,
+ * while the last bit of PORT contains the fragmentation bit.
  */
+//TODO: update doc
 typedef struct tag_s3tp_header
 {
 	uint16_t crc;
@@ -48,6 +48,7 @@ typedef struct tag_s3tp_header
 				 * 2nd Byte: Seq_sub 
 				 used for packet fragmentation 
 				*/
+	uint16_t ack;
 	/*
 	 * Contains the length of the payload of this current packet.
 	 * The last 2 bits are reserved for the protocol.
@@ -96,19 +97,43 @@ typedef struct tag_s3tp_header
 	}
 
     uint16_t getPduLength() {
-        return (uint16_t )(pdu_length & 0x3FFF);
+        return (uint16_t )(pdu_length & 0x1FFF);
     }
 
     void setPduLength(uint16_t pdu_len) {
-        pdu_length = (uint16_t)((pdu_length & 0x4000) | pdu_len);
+        pdu_length = (uint16_t)((pdu_length & 0x2000) | pdu_len);
     }
 
-	void setMessageType(S3TP_MSG_TYPE type) {
-		pdu_length = (uint16_t)((pdu_length & 0x3FFF) | (type << 14));
+	uint8_t getFlags() {
+		return (uint8_t ) (pdu_length >> 13);
 	}
 
-	S3TP_MSG_TYPE getMessageType() {
-		return (S3TP_MSG_TYPE)(pdu_length >> 14);
+	void setFlags(uint8_t flags) {
+		pdu_length = (uint16_t )((pdu_length & 0x1FFF) | (flags << 13));
+	}
+
+	void setData(bool data) {
+		if (data) {
+			pdu_length |= (1 << 13);
+		} else {
+			pdu_length &= ~(1 << 13);
+		}
+	}
+
+	void setAck(bool ack) {
+		if (ack) {
+			pdu_length |= (1 << 14);
+		} else {
+			pdu_length &= ~(1 << 14);
+		}
+	}
+
+	void setSync(bool sync) {
+		if (sync) {
+			pdu_length |= (1 << 15);
+		} else {
+			pdu_length &= ~(1 << 15);
+		}
 	}
 
 }S3TP_HEADER;
@@ -163,10 +188,6 @@ struct S3TP_SYNC {
 	uint8_t syncId;
 	uint8_t tx_global_seq = 0;
 	uint8_t port_seq [DEFAULT_MAX_OUT_PORTS] = {0};
-};
-
-struct S3TP_TRANSMISSION_ACK {
-	uint8_t lastSeenSequence;
 };
 
 #pragma pack(pop)
