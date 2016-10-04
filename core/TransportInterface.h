@@ -8,8 +8,9 @@
 class TransportInterface {
 public:
     virtual void onSynchronization(uint8_t syncId) = 0;
-    virtual void onReceiveWindowFull(uint8_t lastValidSequence) = 0;
-    virtual void onAcknowledgement(uint8_t sequenceAck) = 0;
+    virtual void onReceivedPacket(S3TP_PACKET * packet) = 0;
+    virtual void onReceiveWindowFull(uint16_t lastValidSequence) = 0;
+    virtual void onAcknowledgement(uint16_t sequenceAck) = 0;
 };
 
 #endif //S3TP_TRANSPORTINTERFACE_H

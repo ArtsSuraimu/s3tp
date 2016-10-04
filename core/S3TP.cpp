@@ -371,10 +371,20 @@ void S3TP::onOutputQueueAvailable(uint8_t port) {
 /*
  * Transport callbacks
  */
-void S3TP::onReceiveWindowFull(uint8_t lastValidSequence) {
+void S3TP::onReceivedPacket(S3TP_PACKET * packet) {
+    //Send ACK for received sequence + 1
+    S3TP_HEADER * hdr = packet->getHeader();
+    if (hdr->moreFragments()) {
+        tx.scheduleAcknowledgement(hdr->seq + 1);
+    } else {
+        tx.scheduleAcknowledgement((hdr->getGlobalSequence() << 8) + 1);
+    }
+}
+
+void S3TP::onReceiveWindowFull(uint16_t lastValidSequence) {
     tx.scheduleAcknowledgement(lastValidSequence);
 }
 
-void S3TP::onAcknowledgement(uint8_t sequenceAck) {
+void S3TP::onAcknowledgement(uint16_t sequenceAck) {
     tx.notifyAcknowledgement(sequenceAck);
 }

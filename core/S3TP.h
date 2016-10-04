@@ -86,8 +86,9 @@ private:
 
     //Transport methods
     virtual void onSynchronization(uint8_t syncId);
-    virtual void onReceiveWindowFull(uint8_t lastValidSequence);
-    virtual void onAcknowledgement(uint8_t sequenceAck);
+    virtual void onReceivedPacket(S3TP_PACKET * packet);
+    virtual void onReceiveWindowFull(uint16_t lastValidSequence);
+    virtual void onAcknowledgement(uint16_t sequenceAck);
 };
 
 
