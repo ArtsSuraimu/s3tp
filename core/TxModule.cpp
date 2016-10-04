@@ -88,7 +88,7 @@ void TxModule::synchronizeStatus() {
 
 void TxModule::sendAcknowledgement() {
     S3TP_TRANSMISSION_ACK * ack = (S3TP_TRANSMISSION_ACK *)ackPacket.getPayload();
-    ack->lastSeenSequence = sequenceAck;
+    ack->lastSeenSequence = expectedSequence;
 
     S3TP_HEADER * hdr = ackPacket.getHeader();
     uint16_t crc = calc_checksum(ackPacket.getPayload(), hdr->getPduLength());
@@ -96,7 +96,7 @@ void TxModule::sendAcknowledgement() {
 
     bool arq = S3TP_ARQ;
     LOG_DEBUG(std::string("TX: ----------- Ack Packet with sequence "
-                          + std::to_string((int)sequenceAck) +" sent -----------"));
+                          + std::to_string((int)expectedSequence) +" sent -----------"));
     linkInterface->sendFrame(arq, syncPacket.channel, syncPacket.packet, syncPacket.getLength());
 }
 
@@ -225,31 +225,31 @@ void TxModule::scheduleSync(uint8_t syncId) {
     pthread_mutex_unlock(&tx_mutex);
 }
 
-void TxModule::scheduleAcknowledgement(uint8_t ackSequence) {
+void TxModule::scheduleAcknowledgement(uint16_t ackSequence) {
     pthread_mutex_lock(&tx_mutex);
     scheduledAck = true;
-    this->sequenceAck = ackSequence;
+    expectedSequence = ackSequence;
     //Notifying routine thread that a new ack message needs to be sent out
     pthread_cond_signal(&tx_cond);
     pthread_mutex_unlock(&tx_mutex);
 }
 
-void TxModule::notifyAcknowledgement(uint8_t ackSequence) {
+void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
     pthread_mutex_lock(&tx_mutex);
-    uint8_t globSeq, lastAcknowledged = _getRelativeGlobalSequence(ackSequence);
+    uint16_t relativePktSeq;
+    uint16_t lastAcknowledged = ackSequence - lastAcknowledgedSequence;
     S3TP_PACKET * pkt;
     S3TP_HEADER * hdr;
 
     while (!safeQueue.empty()) {
         //Check which packets need to be resent
         pkt = safeQueue.front();
-        hdr = pkt->getHeader();
-        globSeq = _getRelativeGlobalSequence(hdr->getGlobalSequence());
+        relativePktSeq = pkt->getHeader()->seq - lastAcknowledgedSequence;
         //TODO: check entire sequence, not just head
-        if (globSeq <= lastAcknowledged) {
+        if (relativePktSeq < lastAcknowledged) {
             safeQueue.pop_front();
             delete pkt;
-        } else if (global_seq_num - ackSequence >= DEFAULT_RECEIVING_WINDOW) {
+        } else if (lastAcknowledgedSequence == ackSequence) {
             //Some packets were not acknowledged, need to retransmit them
             retransmissionRequired = true;
             break;
@@ -409,10 +409,6 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
     pthread_cond_signal(&tx_cond);
 
     return CODE_SUCCESS;
-}
-
-uint8_t TxModule::_getRelativeGlobalSequence(uint8_t target) {
-    return target - lastAcknowledgedSequence;
 }
 
 int TxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {

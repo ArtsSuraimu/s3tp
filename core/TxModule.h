@@ -40,9 +40,9 @@ public:
     int enqueuePacket(S3TP_PACKET * packet, uint8_t frag_no, bool more_fragments, uint8_t spi_channel, uint8_t options);
     void reset();
     void scheduleSync(uint8_t syncId);
-    void scheduleAcknowledgement(uint8_t ackSequence);
+    void scheduleAcknowledgement(uint16_t ackSequence);
     void setStatusInterface(StatusInterface * statusInterface);
-    void notifyAcknowledgement(uint8_t ackSequence);
+    void notifyAcknowledgement(uint16_t ackSequence);
 
     //Public channel and link methods
     void notifyLinkAvailability(bool available);
@@ -67,7 +67,7 @@ private:
     S3TP_PACKET syncPacket = S3TP_PACKET((char *)&prototypeSync, sizeof(S3TP_SYNC));
     //Ack variables
     bool scheduledAck;
-    uint8_t sequenceAck;
+    uint16_t expectedSequence;
     S3TP_TRANSMISSION_ACK transmissionAck = S3TP_TRANSMISSION_ACK();
     S3TP_PACKET ackPacket = S3TP_PACKET((char *)&transmissionAck, sizeof(S3TP_TRANSMISSION_ACK));
 
@@ -78,7 +78,7 @@ private:
     Buffer * outBuffer;
 
     //Safe output buffer
-    uint8_t lastAcknowledgedSequence;
+    uint16_t lastAcknowledgedSequence;
     bool retransmissionRequired;
     uint8_t retransmittedToSequence;
     std::deque<S3TP_PACKET *> safeQueue;
@@ -98,9 +98,6 @@ private:
     virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
     virtual bool isElementValid(S3TP_PACKET * element);
     virtual bool maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newElement);
-
-    //Utility
-    uint8_t _getRelativeGlobalSequence(uint8_t target);
 };
 
 #endif //S3TP_TXMODULE_H
