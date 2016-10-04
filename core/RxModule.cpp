@@ -11,7 +11,8 @@ RxModule::RxModule() {
     pthread_mutex_init(&rx_mutex, NULL);
     pthread_cond_init(&available_msg_cond, NULL);
     inBuffer = new Buffer(this);
-    statusInterface = NULL;
+    statusInterface = nullptr;
+    transportInterface = nullptr;
 }
 
 RxModule::~RxModule() {
@@ -40,6 +41,12 @@ void RxModule::reset() {
 void RxModule::setStatusInterface(StatusInterface * statusInterface) {
     pthread_mutex_lock(&rx_mutex);
     this->statusInterface = statusInterface;
+    pthread_mutex_unlock(&rx_mutex);
+}
+
+void RxModule::setTransportInterface(TransportInterface * transportInterface) {
+    pthread_mutex_lock(&rx_mutex);
+    this->transportInterface = transportInterface;
     pthread_mutex_unlock(&rx_mutex);
 }
 
@@ -229,7 +236,7 @@ void RxModule::synchronizeStatus(S3TP_SYNC& sync) {
 
     //Notify main module
     LOG_DEBUG("Receiver sequences synchronized correctly");
-    statusInterface->onSynchronization(sync.syncId);
+    transportInterface->onSynchronization(sync.syncId);
     pthread_mutex_unlock(&rx_mutex);
 }
 

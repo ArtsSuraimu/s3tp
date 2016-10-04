@@ -9,6 +9,7 @@
 #include "Constants.h"
 #include "utilities.h"
 #include "StatusInterface.h"
+#include "TransportInterface.h"
 #include <cstring>
 #include <map>
 #include <vector>
@@ -29,6 +30,7 @@ public:
     ~RxModule();
 
     void setStatusInterface(StatusInterface * statusInterface);
+    void setTransportInterface(TransportInterface * transportInterface);
     void startModule();
     void stopModule();
     int openPort(uint8_t port);
@@ -51,6 +53,7 @@ private:
     pthread_cond_t available_msg_cond;
 
     StatusInterface * statusInterface;
+    TransportInterface * transportInterface;
     std::map<uint8_t, uint8_t> open_ports;
     std::map<uint8_t, uint8_t> current_port_sequence;
     std::map<uint8_t, uint8_t> available_messages;
