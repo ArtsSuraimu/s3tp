@@ -381,5 +381,6 @@ void S3TP::onReceiveWindowFull(uint16_t lastValidSequence) {
 }
 
 void S3TP::onAcknowledgement(uint16_t sequenceAck) {
+    //Notify TX that an ack was received
     tx.notifyAcknowledgement(sequenceAck);
 }

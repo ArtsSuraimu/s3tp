@@ -68,8 +68,7 @@ private:
     //Ack variables
     bool scheduledAck;
     uint16_t expectedSequence;
-    S3TP_TRANSMISSION_ACK transmissionAck = S3TP_TRANSMISSION_ACK();
-    S3TP_PACKET ackPacket = S3TP_PACKET((char *)&transmissionAck, sizeof(S3TP_TRANSMISSION_ACK));
+    S3TP_PACKET ackPacket = S3TP_PACKET(nullptr, 0);
 
     //Buffer and port sequences
     std::map<uint8_t, uint8_t> to_consume_port_seq;
@@ -80,7 +79,6 @@ private:
     //Safe output buffer
     uint16_t lastAcknowledgedSequence;
     bool retransmissionRequired;
-    uint8_t retransmittedToSequence;
     std::deque<S3TP_PACKET *> safeQueue;
 
     void txRoutine();

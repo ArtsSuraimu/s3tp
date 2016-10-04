@@ -14,13 +14,12 @@ TxModule::TxModule() {
     retransmissionRequired = false;
     currentPort = 0;
     lastAcknowledgedSequence = 0;
-    retransmittedToSequence = 0;
 
     //Setting up unique sync packet
     syncPacket.channel = DEFAULT_RESERVED_CHANNEL;
     syncPacket.options = S3TP_OPTION_ARQ;
     S3TP_HEADER * hdr = syncPacket.getHeader();
-    hdr->setMessageType(S3TP_MSG_TYPE::SYNC);
+    hdr->setFlags(S3TP_FLAG_SYNC);
     hdr->setPort(0);
     hdr->setGlobalSequence(0);
     hdr->setSubSequence(0);
@@ -31,7 +30,7 @@ TxModule::TxModule() {
     ackPacket.channel = DEFAULT_RESERVED_CHANNEL;
     ackPacket.options = S3TP_OPTION_ARQ;
     hdr = ackPacket.getHeader();
-    hdr->setMessageType(S3TP_MSG_TYPE::T_ACK);
+    hdr->setFlags(S3TP_FLAG_ACK);
     hdr->setPort(0);
     hdr->setGlobalSequence(0);
     hdr->setSubSequence(0);
@@ -87,17 +86,15 @@ void TxModule::synchronizeStatus() {
 }
 
 void TxModule::sendAcknowledgement() {
-    S3TP_TRANSMISSION_ACK * ack = (S3TP_TRANSMISSION_ACK *)ackPacket.getPayload();
-    ack->lastSeenSequence = expectedSequence;
-
     S3TP_HEADER * hdr = ackPacket.getHeader();
-    uint16_t crc = calc_checksum(ackPacket.getPayload(), hdr->getPduLength());
-    hdr->crc = crc;
+    hdr->ack = expectedSequence;
+    hdr->crc = 0;
 
     bool arq = S3TP_ARQ;
     LOG_DEBUG(std::string("TX: ----------- Ack Packet with sequence "
                           + std::to_string((int)expectedSequence) +" sent -----------"));
     linkInterface->sendFrame(arq, syncPacket.channel, syncPacket.packet, syncPacket.getLength());
+    //TODO: check if channel is available
 }
 
 void TxModule::setStatusInterface(StatusInterface * statusInterface) {
@@ -130,15 +127,6 @@ void TxModule::txRoutine() {
                 pthread_cond_timedwait(&tx_cond, &tx_mutex, &timeToWait);
             }
         }
-        //Ack has highest priority after sync
-        if (scheduledAck && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
-            if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
-                _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
-            } else {
-                sendAcknowledgement();
-                scheduledAck = false;
-            }
-        }
         //Packets need to be retransmitted
         if (retransmissionRequired) {
             state = RUNNING;
@@ -146,12 +134,27 @@ void TxModule::txRoutine() {
             retransmissionRequired = false;
             continue;
         }
-        //Send normal data
-        if(!outBuffer->packetsAvailable() || safeQueue.size() == MAX_TRANSMISSION_WINDOW) {
+
+        if (!outBuffer->packetsAvailable()) {
+            //In case no data is avaiable, we may still want to send out an ack
+            if (scheduledAck && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
+                if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
+                    _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
+                } else {
+                    sendAcknowledgement();
+                    scheduledAck = false;
+                }
+            }
             state = WAITING;
             pthread_cond_wait(&tx_cond, &tx_mutex);
             continue;
+        } else if (safeQueue.size() == MAX_TRANSMISSION_WINDOW) {
+            state = BLOCKED;
+            pthread_cond_wait(&tx_cond, &tx_mutex);
+            continue;
         }
+
+        //Send normal data
         state = RUNNING;
 
         /*
@@ -180,6 +183,13 @@ void TxModule::txRoutine() {
             global_seq_num++;
         }
         to_consume_port_seq[hdr->getPort()]++;
+
+        //Acks can be sent in piggybacking
+        if (scheduledAck) {
+            hdr->setAck(true);
+            hdr->ack = expectedSequence;
+            scheduledAck = false;
+        }
 
         //Saving packet inside history queue
         safeQueue.push_back(packet);
@@ -274,6 +284,7 @@ void TxModule::retransmitPackets() {
 
     for (auto const& pkt: safeQueue) {
         hdr = pkt->getHeader();
+        hdr->setAck(false);
         relativePktSeq = hdr->seq - lastAcknowledgedSequence;
         if (relativePktSeq > MAX_TRANSMISSION_WINDOW) {
             //Looks like the sequence was updated
@@ -402,7 +413,7 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
         return CODE_INACTIVE_ERROR;
     }
     S3TP_HEADER * hdr = packet->getHeader();
-    hdr->setMessageType(S3TP_MSG_TYPE::DATA);
+    hdr->setFlags(S3TP_FLAG_DATA);
     //Not setting global seq, as it will be set by transmission thread, when actually sending the packet to L2
     hdr->setSubSequence(frag_no);
     if (more_fragments) {
