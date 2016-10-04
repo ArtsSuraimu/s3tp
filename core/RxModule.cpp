@@ -151,22 +151,19 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     }
 
     S3TP_MSG_TYPE type = hdr->getMessageType();
-    switch (type) {
-        case SYNC:
-            S3TP_SYNC * sync = (S3TP_SYNC*)packet->getPayload();
-            LOG_DEBUG("RX: ----------- Sync Packet received -----------");
-            synchronizeStatus(*sync);
-            return CODE_SUCCESS;
-        case T_ACK:
-            S3TP_TRANSMISSION_ACK * ack = (S3TP_TRANSMISSION_ACK*)packet->getPayload();
-            LOG_DEBUG("RX: ----------- Ack Packet received -----------");
-            handleAcknowledgement(*ack);
-            return CODE_SUCCESS;
-        case DATA:
-            break;
-        default:
-            LOG_WARN(std::string("Unrecognized message type received: " + std::to_string((int)type)));
-            return CODE_ERROR_INVALID_TYPE;
+    if (type == SYNC) {
+        S3TP_SYNC *sync = (S3TP_SYNC *) packet->getPayload();
+        LOG_DEBUG("RX: ----------- Sync Packet received -----------");
+        synchronizeStatus(*sync);
+        return CODE_SUCCESS;
+    } else if (type == T_ACK) {
+        S3TP_TRANSMISSION_ACK * ack = (S3TP_TRANSMISSION_ACK*)packet->getPayload();
+        LOG_DEBUG("RX: ----------- Ack Packet received -----------");
+        handleAcknowledgement(*ack);
+        return CODE_SUCCESS;
+    } else if (type != DATA) {
+        LOG_WARN(std::string("Unrecognized message type received: " + std::to_string((int)type)));
+        return CODE_ERROR_INVALID_TYPE;
     }
 
     if (!isPortOpen(hdr->getPort())) {
