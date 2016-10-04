@@ -10,6 +10,7 @@
 #include "SimpleQueue.h"
 #include "ClientInterface.h"
 #include "StatusInterface.h"
+#include "TransportInterface.h"
 #include "Client.h"
 #include <cstring>
 #include <moveio/PinMapper.h>
@@ -36,7 +37,8 @@ typedef struct transceiver_factory_config {
 }TRANSCEIVER_CONFIG;
 
 class S3TP: public ClientInterface,
-                 public StatusInterface {
+            public StatusInterface,
+            public TransportInterface {
 public:
     S3TP();
     ~S3TP();
@@ -80,8 +82,12 @@ private:
     virtual void onLinkStatusChanged(bool active);
     virtual void onChannelStatusChanged(uint8_t channel, bool active);
     virtual void onError(int error, void * params);
-    virtual void onSynchronization(uint8_t syncId);
     virtual void onOutputQueueAvailable(uint8_t port);
+
+    //Transport methods
+    virtual void onSynchronization(uint8_t syncId);
+    virtual void onReceiveWindowFull(uint8_t lastValidSequence);
+    virtual void onAcknowledgement(uint8_t sequenceAck);
 };
 
 

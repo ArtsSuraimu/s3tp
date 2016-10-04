@@ -366,3 +366,14 @@ void S3TP::onOutputQueueAvailable(uint8_t port) {
 
     pthread_mutex_unlock(&clients_mutex);
 }
+
+/*
+ * Transport callbacks
+ */
+void S3TP::onReceiveWindowFull(uint8_t lastValidSequence) {
+    tx.scheduleAcknowledgement(lastValidSequence);
+}
+
+void S3TP::onAcknowledgement(uint8_t sequenceAck) {
+    tx.notifyAcknowledgement(sequenceAck);
+}
