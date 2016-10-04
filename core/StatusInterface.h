@@ -10,7 +10,6 @@ public:
     virtual void onLinkStatusChanged(bool active) = 0;
     virtual void onChannelStatusChanged(uint8_t channel, bool active) = 0;
     virtual void onError(int error, void * params) = 0;
-    virtual void onSynchronization(uint8_t syncId) = 0;
     virtual void onOutputQueueAvailable(uint8_t port) = 0;
 };
 
