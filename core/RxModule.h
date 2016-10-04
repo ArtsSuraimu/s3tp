@@ -62,7 +62,7 @@ private:
     int handleReceivedPacket(S3TP_PACKET * packet);
     virtual void handleBufferEmpty(int channel);
     void synchronizeStatus(S3TP_SYNC& sync);
-    void handleAcknowledgement(S3TP_TRANSMISSION_ACK& ack);
+    void handleAcknowledgement(uint16_t ackNumber);
     void handleLinkStatus(bool linkStatus);
     bool isPortOpen(uint8_t port);
     bool isCompleteMessageForPortAvailable(int port);

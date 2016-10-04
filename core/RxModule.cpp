@@ -154,20 +154,23 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         return CODE_ERROR_CRC_INVALID;
     }
 
-    S3TP_MSG_TYPE type = hdr->getMessageType();
-    if (type == SYNC) {
+    uint8_t flags = hdr->getFlags();
+    if (flags == 0) {
+        LOG_WARN("Unrecognized message type received. No flags were set");
+        return CODE_ERROR_INVALID_TYPE;
+    }
+    if (flags & S3TP_FLAG_SYNC) {
         S3TP_SYNC *sync = (S3TP_SYNC *) packet->getPayload();
         LOG_DEBUG("RX: ----------- Sync Packet received -----------");
         synchronizeStatus(*sync);
         return CODE_SUCCESS;
-    } else if (type == T_ACK) {
-        S3TP_TRANSMISSION_ACK * ack = (S3TP_TRANSMISSION_ACK*)packet->getPayload();
-        LOG_DEBUG("RX: ----------- Ack Packet received -----------");
-        handleAcknowledgement(*ack);
+    }
+    if (flags & S3TP_FLAG_ACK) {
+        LOG_DEBUG("RX: ----------- Ack received -----------");
+        handleAcknowledgement(hdr->ack);
+    }
+    if (!(flags & S3TP_FLAG_DATA)) {
         return CODE_SUCCESS;
-    } else if (type != DATA) {
-        LOG_WARN(std::string("Unrecognized message type received: " + std::to_string((int)type)));
-        return CODE_ERROR_INVALID_TYPE;
     }
 
     //This variable doesn't need locking, as it is a purely internal counter
@@ -187,7 +190,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     }
 
     if (!isPortOpen(hdr->getPort())) {
-        //Dropping packet right away
+        //Dropping packet, as there is no application to receive it
         LOG_INFO(std::string("Incoming packet " + std::to_string(hdr->getGlobalSequence())
                              + "for port " + std::to_string(hdr->getPort())
                              + " was dropped because port is closed"));
@@ -238,10 +241,8 @@ void RxModule::synchronizeStatus(S3TP_SYNC& sync) {
     pthread_mutex_unlock(&rx_mutex);
 }
 
-void RxModule::handleAcknowledgement(S3TP_TRANSMISSION_ACK& ack) {
-    pthread_mutex_lock(&rx_mutex);
-    //TODO: notify tx module to shift its sliding window
-    pthread_mutex_unlock(&rx_mutex);
+void RxModule::handleAcknowledgement(uint16_t ackNumber) {
+    transportInterface->onAcknowledgement(ackNumber);
 }
 
 bool RxModule::isCompleteMessageForPortAvailable(int port) {
