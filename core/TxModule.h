@@ -41,6 +41,7 @@ public:
     void scheduleSync(uint8_t syncId);
     void scheduleAcknowledgement(uint8_t ackSequence);
     void setStatusInterface(StatusInterface * statusInterface);
+    void notifyAcknowledgement(uint8_t ackSequence);
 
     //Public channel and link methods
     void notifyLinkAvailability(bool available);

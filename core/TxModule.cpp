@@ -212,8 +212,14 @@ void TxModule::scheduleAcknowledgement(uint8_t ackSequence) {
     pthread_mutex_lock(&tx_mutex);
     scheduledAck = true;
     this->sequenceAck = ackSequence;
-    //Notifyig routine thread that a new ack message needs to be sent out
+    //Notifying routine thread that a new ack message needs to be sent out
     pthread_cond_signal(&tx_cond);
+    pthread_mutex_unlock(&tx_mutex);
+}
+
+void TxModule::notifyAcknowledgement(uint8_t ackSequence) {
+    pthread_mutex_lock(&tx_mutex);
+    //TODO: implement
     pthread_mutex_unlock(&tx_mutex);
 }
 
