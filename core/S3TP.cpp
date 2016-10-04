@@ -51,6 +51,7 @@ int S3TP::init(TRANSCEIVER_CONFIG * config) {
     }
 
     rx.setStatusInterface(this);
+    rx.setTransportInterface(this);
     pthread_mutex_unlock(&s3tp_mutex);
 
     transceiver->start();
