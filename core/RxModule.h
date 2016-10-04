@@ -22,9 +22,6 @@
 #define CODE_ERROR_PORT_CLOSED -5
 #define CODE_ERROR_INCONSISTENT_STATE -6
 
-#define MAX_REORDERING_WINDOW 128
-#define RECEIVING_WINDOW_SIZE 128
-
 class RxModule: public Transceiver::LinkCallback,
                         PolicyActor<S3TP_PACKET*> {
 public:
@@ -63,11 +60,14 @@ private:
     int handleReceivedPacket(S3TP_PACKET * packet);
     virtual void handleBufferEmpty(int channel);
     void synchronizeStatus(S3TP_SYNC& sync);
+    void handleAcknowledgement(S3TP_TRANSMISSION_ACK& ack);
     void handleLinkStatus(bool linkStatus);
     bool isPortOpen(uint8_t port);
     bool isCompleteMessageForPortAvailable(int port);
     void flushQueues();
-    //void consumeQueue(uint8_t port);
+
+    //Utility
+    uint8_t _getRelativeGlobalSequence(uint8_t target);
 };
 
 

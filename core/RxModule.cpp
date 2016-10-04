@@ -151,15 +151,22 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     }
 
     S3TP_MSG_TYPE type = hdr->getMessageType();
-    if (type == S3TP_MSG_SYNC) {
-        S3TP_SYNC * sync = (S3TP_SYNC*)packet->getPayload();
-        LOG_DEBUG("RX: Sync Packet received");
-        synchronizeStatus(*sync);
-        return CODE_SUCCESS;
-    } else if (type != S3TP_MSG_DATA) {
-        //Not recognized data message
-        LOG_WARN(std::string("Unrecognized message type received: " + std::to_string((int)type)));
-        return CODE_ERROR_INVALID_TYPE;
+    switch (type) {
+        case SYNC:
+            S3TP_SYNC * sync = (S3TP_SYNC*)packet->getPayload();
+            LOG_DEBUG("RX: ----------- Sync Packet received -----------");
+            synchronizeStatus(*sync);
+            return CODE_SUCCESS;
+        case T_ACK:
+            S3TP_TRANSMISSION_ACK * ack = (S3TP_TRANSMISSION_ACK*)packet->getPayload();
+            LOG_DEBUG("RX: ----------- Ack Packet received -----------");
+            handleAcknowledgement(*ack);
+            return CODE_SUCCESS;
+        case DATA:
+            break;
+        default:
+            LOG_WARN(std::string("Unrecognized message type received: " + std::to_string((int)type)));
+            return CODE_ERROR_INVALID_TYPE;
     }
 
     if (!isPortOpen(hdr->getPort())) {
@@ -167,20 +174,24 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         LOG_INFO(std::string("Incoming packet " + std::to_string(hdr->getGlobalSequence())
                              + "for port " + std::to_string(hdr->getPort())
                              + " was dropped because port is closed"));
+        //TODO: still increase sequences
         return CODE_ERROR_PORT_CLOSED;
-    }
+    } else {
+        int result = inBuffer->write(packet);
+        if (result == QUEUE_FULL) {
+            //TODO: handle
+        }
+        if (result != CODE_SUCCESS) {
+            //Something bad happened, couldn't put packet in buffer
+            return result;
+        }
 
-    int result = inBuffer->write(packet);
-    if (result != CODE_SUCCESS) {
-        //Something bad happened, couldn't put packet in buffer
-        return result;
+        LOG_DEBUG(std::string("RX: Packet received from SPI to port "
+                              + std::to_string((int)hdr->getPort())
+                              + " -> glob_seq " + std::to_string((int)hdr->getGlobalSequence())
+                              + ", sub_seq " + std::to_string((int)hdr->getSubSequence())
+                              + ", port_seq " + std::to_string((int)hdr->seq_port)));
     }
-
-    LOG_DEBUG(std::string("RX: Packet received from SPI to port "
-                          + std::to_string((int)hdr->getPort())
-                          + " -> glob_seq " + std::to_string((int)hdr->getGlobalSequence())
-                          + ", sub_seq " + std::to_string((int)hdr->getSubSequence())
-                          + ", port_seq " + std::to_string((int)hdr->seq_port)));
 
     pthread_mutex_lock(&rx_mutex);
     if (isCompleteMessageForPortAvailable(hdr->getPort())) {
@@ -191,15 +202,15 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     pthread_mutex_unlock(&rx_mutex);
 
     //This variable doesn't need locking, as it is a purely internal counter
-    uint8_t relativeGlobSeq = (hdr->getGlobalSequence() - to_consume_global_seq);
-    if (relativeGlobSeq < RECEIVING_WINDOW_SIZE && relativeGlobSeq > lastReceivedGlobalSeq) {
+    uint8_t relativeGlobSeq = _getRelativeGlobalSequence(hdr->getGlobalSequence());
+    if (hdr->getGlobalSequence() == (lastReceivedGlobalSeq + 1)) {
+        //We got the next packet in order
         lastReceivedGlobalSeq = hdr->getGlobalSequence();
     }
     receiving_window++;
-    if (receiving_window >= RECEIVING_WINDOW_SIZE) {
-        //Update global sequence number and flush queues
-        LOG_DEBUG("Receiving window reached. Flushing queues now..");
-        flushQueues();
+    if (receiving_window >= DEFAULT_RECEIVING_WINDOW) {
+        LOG_DEBUG("Receiving window reached. Sending an ack..");
+        //TODO: send ack
         receiving_window = 0;
     }
 
@@ -222,6 +233,12 @@ void RxModule::synchronizeStatus(S3TP_SYNC& sync) {
     //Notify main module
     LOG_DEBUG("Receiver sequences synchronized correctly");
     statusInterface->onSynchronization(sync.syncId);
+    pthread_mutex_unlock(&rx_mutex);
+}
+
+void RxModule::handleAcknowledgement(S3TP_TRANSMISSION_ACK& ack) {
+    pthread_mutex_lock(&rx_mutex);
+    //TODO: notify tx module to shift its sliding window
     pthread_mutex_unlock(&rx_mutex);
 }
 
@@ -338,13 +355,13 @@ void RxModule::flushQueues() {
         }
         S3TP_PACKET * packet = queue->peek();
         pktGlobalSequence = packet->getHeader()->getGlobalSequence() - to_consume_global_seq;
-        if (pktGlobalSequence >= MAX_REORDERING_WINDOW) {
+        /*if (pktGlobalSequence >= MAX_REORDERING_WINDOW) {
             // pktGlobalSequence < glob_seq
             // Packet is too old, clearing the queue
             inBuffer->clearQueueForPort((uint8_t) port);
             //TODO: send error to application
             continue;
-        }
+        }*/
     }
 
     //Updating current global sequence
@@ -352,6 +369,10 @@ void RxModule::flushQueues() {
         LOG_INFO("Packets were lost somewhere...");
     }*/
     to_consume_global_seq = lastReceivedGlobalSeq;
+}
+
+uint8_t RxModule::_getRelativeGlobalSequence(uint8_t target) {
+    return target - to_consume_global_seq;
 }
 
 int RxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
@@ -385,5 +406,5 @@ bool RxModule::maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newEle
     newSeq = newElement->getHeader()->getGlobalSequence() - offset;
     pthread_mutex_unlock(&rx_mutex);
 
-    return abs(newSeq - headSeq) > MAX_REORDERING_WINDOW;
+    return abs(newSeq - headSeq) >= MAX_TRANSMISSION_WINDOW;
 }
