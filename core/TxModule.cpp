@@ -158,7 +158,7 @@ void TxModule::txRoutine() {
          * As buffer only returns ordered packets per queue, we cannot split up fragmented messages
          * by randomly accessing different queues. This would mess up the global sequence number.
          * Instead, if we are transmitting a fragmented message, we prioritize the queue
-         * which holds that message.
+         * which holds that message. If the channel gets blocked, we block as well.
          */
         S3TP_PACKET * packet = (sendingFragments) ?
                                outBuffer->getNextPacket(currentPort) :
@@ -193,8 +193,14 @@ void TxModule::txRoutine() {
 
         bool arq = packet->options & S3TP_ARQ;
 
-        //TODO: check if sendFrame failed. If yes, need to blacklist channel
-        linkInterface->sendFrame(arq, packet->channel, packet->packet, packet->getLength());
+        if (linkInterface->sendFrame(arq, packet->channel, packet->packet, packet->getLength()) < 0) {
+            //Blacklisting channel
+            pthread_mutex_lock(&tx_mutex);
+            _setChannelAvailable(packet->channel, false);
+            //TODO: make this better somehow
+            retransmissionRequired = true;
+            pthread_mutex_unlock(&tx_mutex);
+        }
 
         //Since a packet was just popped from the buffer, the queue is definitely available
         if (outBuffer->getSizeOfQueue(hdr->getPort()) + 1 == MAX_QUEUE_SIZE
@@ -235,9 +241,11 @@ void TxModule::notifyAcknowledgement(uint8_t ackSequence) {
     S3TP_HEADER * hdr;
 
     while (!safeQueue.empty()) {
+        //Check which packets need to be resent
         pkt = safeQueue.front();
         hdr = pkt->getHeader();
         globSeq = _getRelativeGlobalSequence(hdr->getGlobalSequence());
+        //TODO: check entire sequence, not just head
         if (globSeq <= lastAcknowledged) {
             safeQueue.pop_front();
             delete pkt;
@@ -270,6 +278,8 @@ void TxModule::retransmitPackets() {
             //Send frame failed. Either underlying buffer is full or channel is broken
             //TODO: implement safety mechanism
         }
+        safeQueue.pop_front();
+        safeQueue.push_back(pkt);
     }
 }
 
