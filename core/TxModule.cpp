@@ -234,37 +234,52 @@ void TxModule::scheduleAcknowledgement(uint16_t ackSequence) {
     pthread_mutex_unlock(&tx_mutex);
 }
 
+/**
+ * Called whenever we receive an acknowledgment for a previously sent message.
+ * @param ackSequence  The sequence number expected next by the receiver
+ */
 void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
-    pthread_mutex_lock(&tx_mutex);
-    uint16_t relativePktSeq;
-    uint16_t lastAcknowledged = ackSequence - lastAcknowledgedSequence;
     S3TP_PACKET * pkt;
-    S3TP_HEADER * hdr;
 
-    while (!safeQueue.empty()) {
-        //Check which packets need to be resent
-        pkt = safeQueue.front();
-        relativePktSeq = pkt->getHeader()->seq - lastAcknowledgedSequence;
-        //TODO: check entire sequence, not just head
-        if (relativePktSeq < lastAcknowledged) {
-            safeQueue.pop_front();
-            delete pkt;
-        } else if (lastAcknowledgedSequence == ackSequence) {
-            //Some packets were not acknowledged, need to retransmit them
-            retransmissionRequired = true;
-            break;
+    pthread_mutex_lock(&tx_mutex);
+
+    uint16_t relativeOldSeq, relativePktSeq = ackSequence - lastAcknowledgedSequence;
+    if (relativePktSeq >= 0 && relativePktSeq < MAX_TRANSMISSION_WINDOW) {
+        //Clean output safe queue
+        while (!safeQueue.empty()) {
+            pkt = safeQueue.front();
+            relativeOldSeq = pkt->getHeader()->seq - lastAcknowledgedSequence;
+            if (relativeOldSeq < relativePktSeq) {
+                safeQueue.pop_front();
+                delete pkt;
+            } else {
+                break;
+            }
         }
+        lastAcknowledgedSequence = ackSequence;
+    } else if (relativePktSeq == 0) {
+        //We received an ack several times. Some packets got dropped by the receiver.
+        //TODO: handle
+        retransmissionRequired = true;
     }
+    //In case the sequence is a different number, it might be an older ACK coming in. Ignore it
+
     pthread_cond_signal(&tx_cond);
     pthread_mutex_unlock(&tx_mutex);
 }
 
 void TxModule::retransmitPackets() {
-    S3TP_PACKET * pkt;
     S3TP_HEADER * hdr;
+    uint16_t relativePktSeq;
 
-    while (!safeQueue.empty()) {
-        pkt = safeQueue.front();
+    for (auto const& pkt: safeQueue) {
+        hdr = pkt->getHeader();
+        relativePktSeq = hdr->seq - lastAcknowledgedSequence;
+        if (relativePktSeq > MAX_TRANSMISSION_WINDOW) {
+            //Looks like the sequence was updated
+            continue;
+        }
+
         pthread_mutex_unlock(&tx_mutex);
 
         LOG_DEBUG(std::string("TX: Packet sent from port " + std::to_string((int)hdr->getPort())
@@ -278,8 +293,6 @@ void TxModule::retransmitPackets() {
             //Send frame failed. Either underlying buffer is full or channel is broken
             //TODO: implement safety mechanism
         }
-        safeQueue.pop_front();
-        safeQueue.push_back(pkt);
     }
 }
 
