@@ -47,8 +47,7 @@ private:
     bool active;
     Buffer * inBuffer;
     uint8_t to_consume_global_seq;
-    uint8_t receiving_window;
-    uint8_t lastReceivedGlobalSeq;
+    uint16_t expectedSequence;
     pthread_mutex_t rx_mutex;
     pthread_cond_t available_msg_cond;
 
@@ -68,9 +67,6 @@ private:
     bool isPortOpen(uint8_t port);
     bool isCompleteMessageForPortAvailable(int port);
     void flushQueues();
-
-    //Utility
-    uint8_t _getRelativeGlobalSequence(uint8_t target);
 };
 
 

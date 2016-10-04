@@ -6,8 +6,7 @@
 
 RxModule::RxModule() {
     to_consume_global_seq = 0;
-    receiving_window = 0;
-    lastReceivedGlobalSeq = to_consume_global_seq;
+    expectedSequence = 0;
     pthread_mutex_init(&rx_mutex, NULL);
     pthread_cond_init(&available_msg_cond, NULL);
     inBuffer = new Buffer(this);
@@ -28,9 +27,8 @@ RxModule::~RxModule() {
 
 void RxModule::reset() {
     pthread_mutex_lock(&rx_mutex);
-    receiving_window = 0;
+    expectedSequence = 0;
     to_consume_global_seq = 0;
-    lastReceivedGlobalSeq = to_consume_global_seq;
     inBuffer->clear();
     current_port_sequence.clear();
     available_messages.clear();
@@ -52,7 +50,6 @@ void RxModule::setTransportInterface(TransportInterface * transportInterface) {
 
 void RxModule::startModule() {
     pthread_mutex_lock(&rx_mutex);
-    receiving_window = 0;
     active = true;
     pthread_mutex_unlock(&rx_mutex);
 }
@@ -173,12 +170,27 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         return CODE_ERROR_INVALID_TYPE;
     }
 
+    //This variable doesn't need locking, as it is a purely internal counter
+    uint16_t sequence = hdr->seq;
+    if (hdr->seq == expectedSequence) {
+        if (hdr->moreFragments()) {
+            expectedSequence = ++sequence;
+        } else {
+            expectedSequence = sequence + (uint16_t )(1 << 8);
+        }
+        //We got the next expected packet. Sending ACK
+        transportInterface->onReceivedSequence(expectedSequence);
+    } else {
+        //Dropping packet right away and sending ack for previous message
+        transportInterface->onReceivedSequence(expectedSequence);
+        return CODE_ERROR_INCONSISTENT_STATE;
+    }
+
     if (!isPortOpen(hdr->getPort())) {
         //Dropping packet right away
         LOG_INFO(std::string("Incoming packet " + std::to_string(hdr->getGlobalSequence())
                              + "for port " + std::to_string(hdr->getPort())
                              + " was dropped because port is closed"));
-        //TODO: still increase sequences
         return CODE_ERROR_PORT_CLOSED;
     } else {
         int result = inBuffer->write(packet);
@@ -205,19 +217,6 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     }
     pthread_mutex_unlock(&rx_mutex);
 
-    //This variable doesn't need locking, as it is a purely internal counter
-    uint8_t relativeGlobSeq = _getRelativeGlobalSequence(hdr->getGlobalSequence());
-    if (hdr->getGlobalSequence() == (lastReceivedGlobalSeq + 1)) {
-        //We got the next packet in order
-        lastReceivedGlobalSeq = hdr->getGlobalSequence();
-    }
-    receiving_window++;
-    if (receiving_window >= DEFAULT_RECEIVING_WINDOW) {
-        LOG_DEBUG("Receiving window reached. Sending an ack..");
-        //TODO: send ack
-        receiving_window = 0;
-    }
-
     return CODE_SUCCESS;
 }
 
@@ -232,7 +231,6 @@ void RxModule::synchronizeStatus(S3TP_SYNC& sync) {
     //Check all queues and remove useless stuff
     //uint8_t seq1 = sync.tx_global_seq - to_consume_global_seq;
     //uint8_t seq2 = lastReceivedGlobalSeq - to_consume_global_seq;
-    lastReceivedGlobalSeq = sync.tx_global_seq;
 
     //Notify main module
     LOG_DEBUG("Receiver sequences synchronized correctly");
@@ -372,11 +370,6 @@ void RxModule::flushQueues() {
     /*if (highestReceivedGlobalSeq - MAX_REORDERING_WINDOW != to_consume_global_seq) {
         LOG_INFO("Packets were lost somewhere...");
     }*/
-    to_consume_global_seq = lastReceivedGlobalSeq;
-}
-
-uint8_t RxModule::_getRelativeGlobalSequence(uint8_t target) {
-    return target - to_consume_global_seq;
 }
 
 int RxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
