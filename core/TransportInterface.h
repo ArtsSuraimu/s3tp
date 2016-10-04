@@ -6,8 +6,9 @@
 #define S3TP_TRANSPORTINTERFACE_H
 
 class TransportInterface {
+public:
     virtual void onSynchronization(uint8_t syncId) = 0;
-    virtual void onReceiveWindowFull() = 0;
+    virtual void onReceiveWindowFull(uint8_t lastValidSequence) = 0;
     virtual void onAcknowledgement(uint8_t sequenceAck) = 0;
 };
 
