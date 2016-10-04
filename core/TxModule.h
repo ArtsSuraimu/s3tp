@@ -12,12 +12,15 @@
 #include <map>
 #include <trctrl/LinkInterface.h>
 #include <set>
+#include <sys/time.h>
 
 #define TX_PARAM_RECOVERY 0x01
 #define TX_PARAM_CUSTOM 0x02
 #define CODE_INACTIVE_ERROR -1
 
-#define DEFAULT_SYNC_CHANNEL 0
+#define DEFAULT_RESERVED_CHANNEL 0
+
+#define SYNC_WAIT_TIME 2
 
 class TxModule : public PolicyActor<S3TP_PACKET *> {
 public:
@@ -36,6 +39,7 @@ public:
     int enqueuePacket(S3TP_PACKET * packet, uint8_t frag_no, bool more_fragments, uint8_t spi_channel, uint8_t options);
     void reset();
     void scheduleSync(uint8_t syncId);
+    void scheduleAcknowledgement(uint8_t ackSequence);
     void setStatusInterface(StatusInterface * statusInterface);
 
     //Public channel and link methods
@@ -59,6 +63,11 @@ private:
     bool scheduled_sync;
     S3TP_SYNC prototypeSync = S3TP_SYNC(); //Used only for initialization. Never afterwards
     S3TP_PACKET syncPacket = S3TP_PACKET((char *)&prototypeSync, sizeof(S3TP_SYNC));
+    //Ack variables
+    bool scheduledAck;
+    uint8_t sequenceAck;
+    S3TP_TRANSMISSION_ACK transmissionAck = S3TP_TRANSMISSION_ACK();
+    S3TP_PACKET ackPacket = S3TP_PACKET((char *)&transmissionAck, sizeof(S3TP_TRANSMISSION_ACK));
 
     //Buffer and port sequences
     std::map<uint8_t, uint8_t> to_consume_port_seq;
@@ -69,6 +78,7 @@ private:
     void txRoutine();
     static void * staticTxRoutine(void * args);
     void synchronizeStatus();
+    void sendAcknowledgement();
 
     //Internal methods for accessing channels (do not use locking)
     bool _channelsAvailable();

@@ -14,10 +14,21 @@ TxModule::TxModule() {
     currentPort = 0;
 
     //Setting up unique sync packet
-    syncPacket.channel = DEFAULT_SYNC_CHANNEL;
+    syncPacket.channel = DEFAULT_RESERVED_CHANNEL;
     syncPacket.options = S3TP_OPTION_ARQ;
     S3TP_HEADER * hdr = syncPacket.getHeader();
-    hdr->setMessageType(S3TP_MSG_SYNC);
+    hdr->setMessageType(S3TP_MSG_TYPE::SYNC);
+    hdr->setPort(0);
+    hdr->setGlobalSequence(0);
+    hdr->setSubSequence(0);
+    hdr->unsetMoreFragments();
+    hdr->seq_port = 0;
+
+    //Setting up unique ack packet
+    ackPacket.channel = DEFAULT_RESERVED_CHANNEL;
+    ackPacket.options = S3TP_OPTION_ARQ;
+    hdr = ackPacket.getHeader();
+    hdr->setMessageType(S3TP_MSG_TYPE::T_ACK);
     hdr->setPort(0);
     hdr->setGlobalSequence(0);
     hdr->setSubSequence(0);
@@ -72,6 +83,20 @@ void TxModule::synchronizeStatus() {
     linkInterface->sendFrame(arq, syncPacket.channel, syncPacket.packet, syncPacket.getLength());
 }
 
+void TxModule::sendAcknowledgement() {
+    S3TP_TRANSMISSION_ACK * ack = (S3TP_TRANSMISSION_ACK *)ackPacket.getPayload();
+    ack->lastSeenSequence = sequenceAck;
+
+    S3TP_HEADER * hdr = ackPacket.getHeader();
+    uint16_t crc = calc_checksum(ackPacket.getPayload(), hdr->getPduLength());
+    hdr->crc = crc;
+
+    bool arq = S3TP_ARQ;
+    LOG_DEBUG(std::string("TX: ----------- Ack Packet with sequence "
+                          + std::to_string((int)sequenceAck) +" sent -----------"));
+    linkInterface->sendFrame(arq, syncPacket.channel, syncPacket.packet, syncPacket.getLength());
+}
+
 void TxModule::setStatusInterface(StatusInterface * statusInterface) {
     pthread_mutex_lock(&tx_mutex);
     this->statusInterface = statusInterface;
@@ -80,6 +105,8 @@ void TxModule::setStatusInterface(StatusInterface * statusInterface) {
 
 //Private methods
 void TxModule::txRoutine() {
+    struct timespec timeToWait;
+
     pthread_mutex_lock(&tx_mutex);
     while(active) {
         if (!linkInterface->getLinkStatus() || !_channelsAvailable()) {
@@ -88,14 +115,28 @@ void TxModule::txRoutine() {
             continue;
         }
         //Sync has priority over any other packet
-        if (scheduled_sync && _isChannelAvailable(DEFAULT_SYNC_CHANNEL)) {
-            if (linkInterface->getBufferFull(DEFAULT_SYNC_CHANNEL)) {
-                _setChannelAvailable(DEFAULT_SYNC_CHANNEL, false);
+        if (scheduled_sync && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
+            if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
+                _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
             } else {
                 synchronizeStatus();
                 scheduled_sync = false;
+                //Force synchronization
+                timeToWait.tv_sec = SYNC_WAIT_TIME;
+                timeToWait.tv_nsec = 0;
+                pthread_cond_timedwait(&tx_cond, &tx_mutex, &timeToWait);
             }
         }
+        //Ack has highest priority after sync
+        if (scheduledAck && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
+            if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
+                _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
+            } else {
+                sendAcknowledgement();
+                scheduledAck = false;
+            }
+        }
+        //Send normal data
         if(!outBuffer->packetsAvailable()) {
             state = WAITING;
             pthread_cond_wait(&tx_cond, &tx_mutex);
@@ -163,6 +204,15 @@ void TxModule::scheduleSync(uint8_t syncId) {
     S3TP_SYNC * syncStructure = (S3TP_SYNC *)syncPacket.getPayload();
     syncStructure->syncId = syncId;
     //Notifying routine thread that a new sync message is waiting
+    pthread_cond_signal(&tx_cond);
+    pthread_mutex_unlock(&tx_mutex);
+}
+
+void TxModule::scheduleAcknowledgement(uint8_t ackSequence) {
+    pthread_mutex_lock(&tx_mutex);
+    scheduledAck = true;
+    this->sequenceAck = ackSequence;
+    //Notifyig routine thread that a new ack message needs to be sent out
     pthread_cond_signal(&tx_cond);
     pthread_mutex_unlock(&tx_mutex);
 }
@@ -273,7 +323,7 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
         return CODE_INACTIVE_ERROR;
     }
     S3TP_HEADER * hdr = packet->getHeader();
-    hdr->setMessageType(S3TP_MSG_DATA);
+    hdr->setMessageType(S3TP_MSG_TYPE::DATA);
     //Not setting global seq, as it will be set by transmission thread, when actually sending the packet to L2
     hdr->setSubSequence(frag_no);
     if (more_fragments) {
