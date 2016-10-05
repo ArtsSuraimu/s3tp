@@ -274,7 +274,7 @@ void S3tpConnector::closeConnection() {
 void S3tpConnector::asyncListener() {
     ssize_t rd;
     AppMessageType type;
-    S3TP_CONTROL control;
+    S3TP_CONNECTOR_CONTROL control;
 
     LOG_DEBUG("Started Client async listener thread");
 
@@ -306,10 +306,10 @@ void S3tpConnector::asyncListener() {
     LOG_DEBUG("Listener thread: STOP");
 }
 
-bool S3tpConnector::receiveControlMessage(S3TP_CONTROL& control) {
+bool S3tpConnector::receiveControlMessage(S3TP_CONNECTOR_CONTROL& control) {
     ssize_t rd;
 
-    rd = read(socketDescriptor, &control, sizeof(S3TP_CONTROL));
+    rd = read(socketDescriptor, &control, sizeof(S3TP_CONNECTOR_CONTROL));
 
     //Handle socket errors
     if (rd == 0) {

@@ -10,7 +10,6 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/socket.h>
-#include <s3tp/core/S3tpShared.h>
 #include "S3tpShared.h"
 #include "ClientInterface.h"
 
@@ -37,7 +36,7 @@ public:
     uint8_t getVirtualChannel();
     uint8_t getOptions();
     int send(const void * data, size_t len);
-    int sendControlMessage(S3TP_CONTROL message);
+    int sendControlMessage(S3TP_CONNECTOR_CONTROL message);
     void kill();
 };
 

@@ -277,7 +277,7 @@ int S3TP::checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t 
 }
 
 void S3TP::notifyAvailabilityToClients() {
-    S3TP_CONTROL control;
+    S3TP_CONNECTOR_CONTROL control;
     control.controlMessageType = AVAILABLE;
     control.error = 0;
 
@@ -328,7 +328,7 @@ void S3TP::onLinkStatusChanged(bool active) {
 void S3TP::onChannelStatusChanged(uint8_t channel, bool active) {
     tx.setChannelAvailable(channel, active);
 
-    S3TP_CONTROL control;
+    S3TP_CONNECTOR_CONTROL control;
     control.controlMessageType = AVAILABLE;
     control.error = 0;
     //Notify previously blocked clients
@@ -349,8 +349,10 @@ void S3TP::onSynchronization(uint8_t syncId) {
     if (syncId == S3TP_SYNC_INITIATOR) {
         // Sync init received. so we respond with an ack sync
         synchronizeStatus(S3TP_SYNC_ACK);
+    } else {
+        //Otherwise it is an ack. We notify the tx module, that we are now correctly synchronized
+        tx.notifySynchronization(true);
     }
-    //Otherwise don't care about the sync, as it simply an ack
 }
 
 void S3TP::onOutputQueueAvailable(uint8_t port) {
@@ -358,7 +360,7 @@ void S3TP::onOutputQueueAvailable(uint8_t port) {
 
     std::map<uint8_t, Client*>::iterator it = clients.find(port);
     if (it != clients.end()) {
-        S3TP_CONTROL control;
+        S3TP_CONNECTOR_CONTROL control;
         control.controlMessageType = AVAILABLE;
         control.error = 0;
 

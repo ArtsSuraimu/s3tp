@@ -126,7 +126,7 @@ int Client::send(const void * data, size_t len) {
     return CODE_SUCCESS;
 }
 
-int Client::sendControlMessage(S3TP_CONTROL message) {
+int Client::sendControlMessage(S3TP_CONNECTOR_CONTROL message) {
     ssize_t wr;
     AppMessageType msgType = APP_CONTROL_MESSAGE;
 
@@ -143,7 +143,7 @@ int Client::sendControlMessage(S3TP_CONTROL message) {
     }
 
     //Sending control message
-    wr = write(socket, &message, sizeof(S3TP_CONTROL));
+    wr = write(socket, &message, sizeof(S3TP_CONNECTOR_CONTROL));
     if (wr == 0) {
         LOG_WARN(std::string("Connection was closed by s3tp client " + std::to_string(socket)));
         handleConnectionClosed();
@@ -161,7 +161,7 @@ void Client::clientRoutine() {
     size_t len = 0;
     int error = 0;
     AppMessageType type;
-    S3TP_CONTROL control;
+    S3TP_CONNECTOR_CONTROL control;
 
     LOG_DEBUG(std::string("Started client thread for socket " + std::to_string(socket)));
     while (isConnected()) {

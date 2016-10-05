@@ -84,7 +84,7 @@ typedef uint8_t S3tpError;
 typedef struct tag_s3tp_control {
     AppControlMessageType controlMessageType;
     S3tpError error;
-}S3TP_CONTROL;
+}S3TP_CONNECTOR_CONTROL;
 
 typedef struct tag_s3tp_length_redundant {
     size_t command[SAFE_TRANSMISSION_COUNT];

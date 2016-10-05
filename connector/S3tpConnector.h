@@ -47,7 +47,7 @@ private:
     S3tpCallback * callback;
 
     void asyncListener();
-    bool receiveControlMessage(S3TP_CONTROL& control);
+    bool receiveControlMessage(S3TP_CONNECTOR_CONTROL& control);
     bool receiveDataMessage();
 };
 
