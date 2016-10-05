@@ -14,7 +14,14 @@
 //S3TP Header Flags
 #define S3TP_FLAG_DATA 0x01
 #define S3TP_FLAG_ACK 0x02
-#define S3TP_FLAG_SYNC 0x04
+#define S3TP_FLAG_CTRL 0x04
+
+enum CONTROL_TYPE : uint8_t {
+    INITIAL_CONNECT = 0x00,
+    SYNC = 0x01,
+    FIN = 0x02,
+    RESET = 0x03
+};
 
 #define S3TP_SYNC_INITIATOR 0x00
 #define S3TP_SYNC_ACK 0xFF
@@ -36,7 +43,7 @@ typedef int SOCKET;
  * 			PDU LENGTH			|  PORT_SEQ  |   PORT
  * ------------------------------------------------------
  *
- * Additionally, the last 3 bits of PDU_LENGTH are reserved to the protocol,
+ * Additionally, the last 4 bits of PDU_LENGTH are reserved to the protocol,
  * while the last bit of PORT contains the fragmentation bit.
  */
 //TODO: update doc
@@ -158,7 +165,7 @@ struct S3TP_PACKET{
 	}
 
     ~S3TP_PACKET() {
-        delete packet;
+        delete [] packet;
     }
 
 	S3TP_PACKET(const char * packet, int len, uint8_t channel) {
@@ -179,6 +186,12 @@ struct S3TP_PACKET{
 	S3TP_HEADER * getHeader() {
 		return (S3TP_HEADER *)packet;
 	}
+};
+
+struct S3TP_CONTROL {
+    CONTROL_TYPE type;
+    uint16_t syncSequence;
+    uint8_t portSequence;
 };
 
 struct S3TP_SYNC {
