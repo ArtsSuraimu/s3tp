@@ -185,7 +185,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         if (hdr->moreFragments()) {
             expectedSequence = ++sequence;
         } else {
-            expectedSequence = sequence + (uint16_t )(1 << 8);
+            expectedSequence = (uint16_t )((sequence & 0xFF00) + (1 << 8));
         }
         //We got the next expected packet. Sending ACK
         transportInterface->onReceivedSequence(expectedSequence);
