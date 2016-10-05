@@ -14,6 +14,7 @@
 #include <set>
 #include <queue>
 #include <sys/time.h>
+#include <chrono>
 
 #define TX_PARAM_RECOVERY 0x01
 #define TX_PARAM_CUSTOM 0x02
@@ -21,7 +22,8 @@
 
 #define DEFAULT_RESERVED_CHANNEL 0
 
-#define SYNC_WAIT_TIME 2
+#define SYNC_WAIT_TIME 5
+#define ACK_WAIT_TIME 5
 
 class TxModule : public PolicyActor<S3TP_PACKET *> {
 public:
@@ -80,6 +82,10 @@ private:
     uint16_t lastAcknowledgedSequence;
     bool retransmissionRequired;
     std::deque<S3TP_PACKET *> safeQueue;
+
+    //Transmission control timer
+    struct timespec ackTimer;
+    struct timespec syncTimer;
 
     void txRoutine();
     static void * staticTxRoutine(void * args);

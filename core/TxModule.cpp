@@ -37,6 +37,10 @@ TxModule::TxModule() {
     hdr->unsetMoreFragments();
     hdr->seq_port = 0;
 
+    //Timer setup
+    syncTimer.tv_sec = SYNC_WAIT_TIME;
+    syncTimer.tv_nsec = 0;
+
     pthread_mutex_init(&tx_mutex, NULL);
     pthread_cond_init(&tx_cond, NULL);
     outBuffer = new Buffer(this);
@@ -105,9 +109,8 @@ void TxModule::setStatusInterface(StatusInterface * statusInterface) {
 
 //Private methods
 void TxModule::txRoutine() {
-    struct timespec timeToWait;
-    timeToWait.tv_sec = SYNC_WAIT_TIME;
-    timeToWait.tv_nsec = 0;
+    double elapsed_time = 0;
+    int milliseconds = 0;
 
     pthread_mutex_lock(&tx_mutex);
     while(active) {
@@ -124,7 +127,7 @@ void TxModule::txRoutine() {
                 synchronizeStatus();
                 scheduled_sync = false;
                 //Force synchronization
-                pthread_cond_timedwait(&tx_cond, &tx_mutex, &timeToWait);
+                pthread_cond_timedwait(&tx_cond, &tx_mutex, &syncTimer);
             }
         }
         //Packets need to be retransmitted
@@ -149,8 +152,28 @@ void TxModule::txRoutine() {
             pthread_cond_wait(&tx_cond, &tx_mutex);
             continue;
         } else if (safeQueue.size() == MAX_TRANSMISSION_WINDOW) {
+            //Maximum size of window reached, need to wait for acks
             state = BLOCKED;
-            pthread_cond_wait(&tx_cond, &tx_mutex);
+            std::chrono::time_point<std::chrono::system_clock> start, now;
+            std::chrono::duration<double> time_difference;
+            start = std::chrono::system_clock::now();
+
+            ackTimer.tv_sec = ACK_WAIT_TIME;
+            ackTimer.tv_nsec = 0;
+            while (safeQueue.size() == MAX_TRANSMISSION_WINDOW) {
+                pthread_cond_timedwait(&tx_cond, &tx_mutex, &ackTimer);
+                now = std::chrono::system_clock::now();
+                time_difference = now - start;
+                elapsed_time = time_difference.count();
+                if (elapsed_time >= ACK_WAIT_TIME || retransmissionRequired) {
+                    //Timer should be ended
+                    break;
+                }
+                //Filling ackTimer with new value
+                ackTimer.tv_sec = ACK_WAIT_TIME - (int)elapsed_time;
+                milliseconds = ((int)(elapsed_time * 1000)) % 1000;
+                ackTimer.tv_nsec = milliseconds * 1000000;
+            }
             continue;
         }
 
@@ -267,6 +290,7 @@ void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
             }
         }
         lastAcknowledgedSequence = ackSequence;
+        retransmissionRequired = false;
     } else if (relativePktSeq == 0) {
         //We received an ack several times. Some packets got dropped by the receiver.
         //TODO: handle
