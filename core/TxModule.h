@@ -41,10 +41,19 @@ public:
     void stopRoutine();
     int enqueuePacket(S3TP_PACKET * packet, uint8_t frag_no, bool more_fragments, uint8_t spi_channel, uint8_t options);
     void reset();
-    void scheduleSync(uint8_t syncId);
-    void scheduleAcknowledgement(uint16_t ackSequence);
     void setStatusInterface(StatusInterface * statusInterface);
+
+    //S3TP Control APIs
+    void scheduleAcknowledgement(uint16_t ackSequence);
+    void scheduleReset();
+    void scheduleInitialConnect();
+    void scheduleSync(uint8_t port, uint8_t channel, uint8_t options);
+    void scheduleFin(uint8_t port, uint8_t channel, uint8_t options);
     void notifyAcknowledgement(uint16_t ackSequence);
+    //void notifySynchronization(bool synchronized);
+    void notifyInitialConnect();
+    void notifySync(uint8_t port);
+    void notifyFin(uint8_t port);
 
     //Public channel and link methods
     void notifyLinkAvailability(bool available);
@@ -62,6 +71,11 @@ private:
     uint8_t currentPort;
     Transceiver::LinkInterface * linkInterface;
     StatusInterface * statusInterface;
+
+    //Control variables
+    std::queue<S3TP_CONTROL *> controlQueue; //High priority queue
+    bool pendingReset;
+    bool pendingInitialConnect;
 
     //Sync variables
     bool scheduled_sync;

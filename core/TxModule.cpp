@@ -14,12 +14,14 @@ TxModule::TxModule() {
     retransmissionRequired = false;
     currentPort = 0;
     lastAcknowledgedSequence = 0;
+    pendingReset = false;
+    pendingInitialConnect = false;
 
     //Setting up unique sync packet
     syncPacket.channel = DEFAULT_RESERVED_CHANNEL;
     syncPacket.options = S3TP_OPTION_ARQ;
     S3TP_HEADER * hdr = syncPacket.getHeader();
-    hdr->setFlags(S3TP_FLAG_SYNC);
+    hdr->setFlags(S3TP_FLAG_CTRL);
     hdr->setPort(0);
     hdr->setGlobalSequence(0);
     hdr->setSubSequence(0);
@@ -125,9 +127,9 @@ void TxModule::txRoutine() {
                 _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
             } else {
                 synchronizeStatus();
-                scheduled_sync = false;
                 //Force synchronization
-                pthread_cond_timedwait(&tx_cond, &tx_mutex, &syncTimer);
+                pthread_cond_wait(&tx_cond, &tx_mutex);
+                continue;
             }
         }
         //Packets need to be retransmitted
@@ -139,7 +141,7 @@ void TxModule::txRoutine() {
         }
 
         if (!outBuffer->packetsAvailable()) {
-            //In case no data is avaiable, we may still want to send out an ack
+            //In case no data is available, we may still want to send out an ack
             if (scheduledAck && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
                 if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
                     _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
@@ -248,7 +250,7 @@ void TxModule::txRoutine() {
     pthread_exit(NULL);
 }
 
-void TxModule::scheduleSync(uint8_t syncId) {
+/*void TxModule::scheduleSync(uint8_t syncId) {
     pthread_mutex_lock(&tx_mutex);
     scheduled_sync = true;
     S3TP_SYNC * syncStructure = (S3TP_SYNC *)syncPacket.getPayload();
@@ -256,21 +258,13 @@ void TxModule::scheduleSync(uint8_t syncId) {
     //Notifying routine thread that a new sync message is waiting
     pthread_cond_signal(&tx_cond);
     pthread_mutex_unlock(&tx_mutex);
-}
-
-void TxModule::scheduleAcknowledgement(uint16_t ackSequence) {
-    pthread_mutex_lock(&tx_mutex);
-    scheduledAck = true;
-    expectedSequence = ackSequence;
-    //Notifying routine thread that a new ack message needs to be sent out
-    pthread_cond_signal(&tx_cond);
-    pthread_mutex_unlock(&tx_mutex);
-}
+}*/
 
 /**
  * Called whenever we receive an acknowledgment for a previously sent message.
  * @param ackSequence  The sequence number expected next by the receiver
  */
+/*
 void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
     S3TP_PACKET * pkt;
 
@@ -302,6 +296,117 @@ void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
     pthread_mutex_unlock(&tx_mutex);
 }
 
+void TxModule::notifySynchronization(bool synchronized) {
+    pthread_mutex_lock(&tx_mutex);
+    this->scheduled_sync = !synchronized;
+    pthread_cond_signal(&tx_cond);
+    pthread_mutex_unlock(&tx_mutex);
+}*/
+
+/**
+ * Called usually after receiving a packet.
+ * After scheduling an ack, the TX worker thread will either send out a dedicated ack packet
+ * or simply put the scheduled acknowledgement in piggybacking to another packet.
+ * @param ackSequence  The next expected sequence, to be sent to the receiver
+ */
+void TxModule::scheduleAcknowledgement(uint16_t ackSequence) {
+    pthread_mutex_lock(&tx_mutex);
+    scheduledAck = true;
+    expectedSequence = ackSequence;
+    //Notifying routine thread that a new ack message needs to be sent out
+    pthread_cond_signal(&tx_cond);
+    pthread_mutex_unlock(&tx_mutex);
+}
+
+/**
+ * Need to perform a hard reset of the protocol status.
+ * After reset request is sent out, the worker thread waits until it receives an acknowledgement.
+ */
+void TxModule::scheduleReset() {
+    pthread_mutex_lock(&tx_mutex);
+    //Can only schedule one reset request at a time
+    if (!pendingReset) {
+        S3TP_CONTROL * control = new S3TP_CONTROL();
+        control->type = CONTROL_TYPE::RESET;
+        control->syncSequence = 0;
+        controlQueue.push(control);
+    }
+    pendingReset = true;
+    pthread_mutex_unlock(&tx_mutex);
+}
+
+/**
+ * Tells the other S3TP endpoint (if any), that this module has just been started and therefore
+ * requests an initial sync. While all the sequence numbers on this side are typically set
+ * to 0 at this stage, the other endpoint might have different sequences.
+ * Upon receiving a response, the sequences expected by the other endpoint will be known.
+ */
+void TxModule::scheduleInitialConnect() {
+    pthread_mutex_lock(&tx_mutex);
+    if (!pendingInitialConnect) {
+        S3TP_CONTROL * control = new S3TP_CONTROL();
+        control->type = CONTROL_TYPE::INITIAL_CONNECT;
+        control->syncSequence = 0;
+        controlQueue.push(control);
+    }
+    pendingInitialConnect = true;
+    pthread_mutex_unlock(&tx_mutex);
+}
+
+/**
+ * Send out a synchronization packet, used for telling the other endpoint that a new connection
+ * is being opened. The application is attempting to synchronize the current sequence number.
+ *
+ * This packet is not sent over a prioritized channel, but on the channel specified by the application.
+ *
+ * @param port  The port that was just opened
+ */
+void TxModule::scheduleSync(uint8_t port, uint8_t channel, uint8_t options) {
+    S3TP_CONTROL control;
+    control.type = CONTROL_TYPE::SYNC;
+    control.syncSequence = 0;
+    S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
+    packet->getHeader()->setCtrl(true);
+    packet->getHeader()->setPort(port);
+    packet->channel = channel;
+    packet->options = options;
+
+    enqueuePacket(packet, 0, false, channel, options);
+}
+
+/**
+ * Send out a finalization packet, used for telling the other endpoint that an existing
+ * connection is being shutdown.
+ * @param port  The port that was just closed
+ */
+void TxModule::scheduleFin(uint8_t port, uint8_t channel, uint8_t options) {
+    S3TP_CONTROL control;
+    control.type = CONTROL_TYPE::FIN;
+    control.syncSequence = 0;
+    S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
+    packet->getHeader()->setCtrl(true);
+    packet->getHeader()->setPort(port);
+    packet->channel = channel;
+    packet->options = options;
+
+    enqueuePacket(packet, 0, false, channel, options);
+}
+
+void notifyAcknowledgement(uint16_t ackSequence);
+//void notifySynchronization(bool synchronized);
+void notifyInitialConnect();
+void notifySync(uint8_t port);
+
+void TxModule::notifyFin(uint8_t port) {
+    pthread_mutex_lock(&tx_mutex);
+    //We respond to the fin packet
+    //TODO: implement
+    pthread_mutex_unlock(&tx_mutex);
+}
+
+/*
+ * Routine section
+ */
 void TxModule::retransmitPackets() {
     S3TP_HEADER * hdr;
     uint16_t relativePktSeq;
@@ -437,7 +542,7 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
         return CODE_INACTIVE_ERROR;
     }
     S3TP_HEADER * hdr = packet->getHeader();
-    hdr->setFlags(S3TP_FLAG_DATA);
+    hdr->setData(true);
     //Not setting global seq, as it will be set by transmission thread, when actually sending the packet to L2
     hdr->setSubSequence(frag_no);
     if (more_fragments) {
