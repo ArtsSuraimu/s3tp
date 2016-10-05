@@ -173,7 +173,13 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         return CODE_SUCCESS;
     }
 
-    //This variable doesn't need locking, as it is a purely internal counter
+    //No need for locking
+    if (inBuffer->getSizeOfQueue(hdr->getPort()) >= MAX_QUEUE_SIZE) {
+        //Dropping packet right away since queue is full anyway and force sender to retransmit
+        transportInterface->onReceivedSequence(expectedSequence);
+        return CODE_SERVER_QUEUE_FULL;
+    }
+
     uint16_t sequence = hdr->seq;
     if (hdr->seq == expectedSequence) {
         if (hdr->moreFragments()) {
@@ -197,11 +203,9 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         return CODE_ERROR_PORT_CLOSED;
     } else {
         int result = inBuffer->write(packet);
-        if (result == QUEUE_FULL) {
-            //TODO: handle
-        }
         if (result != CODE_SUCCESS) {
             //Something bad happened, couldn't put packet in buffer
+            LOG_ERROR(std::string("Could not put packet " + std::to_string((int)sequence) + " in buffer"));
             return result;
         }
 
