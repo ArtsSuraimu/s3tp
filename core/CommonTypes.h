@@ -12,6 +12,7 @@
 #include "Constants.h"
 
 //S3TP Header Flags
+#define S3TP_NO_FLAGS 0x00
 #define S3TP_FLAG_DATA 0x01
 #define S3TP_FLAG_ACK 0x02
 #define S3TP_FLAG_CTRL 0x04
@@ -135,8 +136,8 @@ typedef struct tag_s3tp_header
 		}
 	}
 
-	void setSync(bool sync) {
-		if (sync) {
+	void setCtrl(bool control) {
+		if (control) {
 			pdu_length |= (1 << 15);
 		} else {
 			pdu_length &= ~(1 << 15);
@@ -162,6 +163,7 @@ struct S3TP_PACKET{
 		memcpy(getPayload(), pdu, pduLen);
 		S3TP_HEADER * header = getHeader();
 		header->setPduLength(pduLen);
+        header->setFlags(S3TP_NO_FLAGS);
 	}
 
     ~S3TP_PACKET() {
@@ -173,6 +175,9 @@ struct S3TP_PACKET{
 		this->packet = new char[len * sizeof(char)];
 		memcpy(this->packet, packet, (size_t)len);
 		this->channel = channel;
+        S3TP_HEADER * header = getHeader();
+        header->setPduLength((uint16_t )len);
+        header->setFlags(S3TP_NO_FLAGS);
 	}
 
 	int getLength() {
@@ -191,7 +196,6 @@ struct S3TP_PACKET{
 struct S3TP_CONTROL {
     CONTROL_TYPE type;
     uint16_t syncSequence;
-    uint8_t portSequence;
 };
 
 struct S3TP_SYNC {
