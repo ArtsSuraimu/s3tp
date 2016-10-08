@@ -195,7 +195,7 @@ int S3tpConnector::recv(void * buffer, size_t len) {
         }
         rd += i;
         currentPosition += i;
-    } while (rd < len);
+    } while ( (unsigned long)rd < len );
 
     return (int)rd;
 }
@@ -250,7 +250,7 @@ char * S3tpConnector::recvRaw(size_t * len, int * error) {
         }
         rd += i;
         currentPosition += i;
-    } while(rd < *len);
+    } while( (unsigned long) rd < *len);
 
     return msg;
 }
@@ -398,7 +398,7 @@ bool S3tpConnector::receiveDataMessage() {
         }
         rd += i;
         currentPosition += i;
-    } while(rd < len);
+    } while( (unsigned long) rd < len);
 
     //Payload received entirely
     message[len] = '\0';
