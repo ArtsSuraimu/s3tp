@@ -52,29 +52,6 @@ void TxModule::reset() {
     pthread_mutex_unlock(&tx_mutex);
 }
 
-/*void TxModule::synchronizeStatus() {
-    //Not locking, as the method should only be called from a synchronized code block
-    S3TP_SYNC * syncStructure = (S3TP_SYNC *)syncPacket.getPayload();
-    std::fill(syncStructure->port_seq, syncStructure->port_seq + DEFAULT_MAX_OUT_PORTS, 0);
-    syncStructure->tx_global_seq = global_seq_num;
-    for (std::map<uint8_t, uint8_t>::iterator it = port_sequence.begin(); it != port_sequence.end(); ++it) {
-        S3TP_PACKET * pkt = outBuffer->peektNextPacket(it->first);
-        if (pkt != NULL) {
-            syncStructure->port_seq[it->first] = pkt->getHeader()->seq_port;
-        } else {
-            syncStructure->port_seq[it->first] = it->second;
-        }
-    }
-
-    S3TP_HEADER * hdr = syncPacket.getHeader();
-    uint16_t crc = calc_checksum(syncPacket.getPayload(), hdr->getPduLength());
-    hdr->crc = crc;
-
-    bool arq = S3TP_ARQ;
-    LOG_DEBUG("TX: ----------- Sync Packet sent to receiver -----------");
-    linkInterface->sendFrame(arq, syncPacket.channel, syncPacket.packet, syncPacket.getLength());
-}*/
-
 void TxModule::sendAcknowledgement() {
     S3TP_HEADER * hdr = ackPacket.getHeader();
     hdr->ack = expectedSequence;
@@ -280,59 +257,6 @@ void TxModule::_sendControlPacket(S3TP_PACKET *pkt) {
 
     pthread_mutex_lock(&tx_mutex);
 }
-
-/*void TxModule::scheduleSync(uint8_t syncId) {
-    pthread_mutex_lock(&tx_mutex);
-    scheduled_sync = true;
-    S3TP_SYNC * syncStructure = (S3TP_SYNC *)syncPacket.getPayload();
-    syncStructure->syncId = syncId;
-    //Notifying routine thread that a new sync message is waiting
-    pthread_cond_signal(&tx_cond);
-    pthread_mutex_unlock(&tx_mutex);
-}*/
-
-/**
- * Called whenever we receive an acknowledgment for a previously sent message.
- * @param ackSequence  The sequence number expected next by the receiver
- */
-/*
-void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
-    S3TP_PACKET * pkt;
-
-    pthread_mutex_lock(&tx_mutex);
-
-    uint16_t relativeOldSeq, relativePktSeq = ackSequence - lastAcknowledgedSequence;
-    if (relativePktSeq >= 0 && relativePktSeq < MAX_TRANSMISSION_WINDOW) {
-        //Clean output safe queue
-        while (!safeQueue.empty()) {
-            pkt = safeQueue.front();
-            relativeOldSeq = pkt->getHeader()->seq - lastAcknowledgedSequence;
-            if (relativeOldSeq < relativePktSeq) {
-                safeQueue.pop_front();
-                delete pkt;
-            } else {
-                break;
-            }
-        }
-        lastAcknowledgedSequence = ackSequence;
-        retransmissionRequired = false;
-    } else if (relativePktSeq == 0) {
-        //We received an ack several times. Some packets got dropped by the receiver.
-        //TODO: handle
-        retransmissionRequired = true;
-    }
-    //In case the sequence is a different number, it might be an older ACK coming in. Ignore it
-
-    pthread_cond_signal(&tx_cond);
-    pthread_mutex_unlock(&tx_mutex);
-}
-
-void TxModule::notifySynchronization(bool synchronized) {
-    pthread_mutex_lock(&tx_mutex);
-    this->scheduled_sync = !synchronized;
-    pthread_cond_signal(&tx_cond);
-    pthread_mutex_unlock(&tx_mutex);
-}*/
 
 /**
  * Called usually after receiving a packet.

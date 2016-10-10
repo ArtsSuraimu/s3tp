@@ -93,7 +93,6 @@ private:
 
     void txRoutine();
     static void * staticTxRoutine(void * args);
-    void synchronizeStatus();
     void sendAcknowledgement();
     void retransmitPackets();
     void _sendDataPacket(S3TP_PACKET *pkt);
