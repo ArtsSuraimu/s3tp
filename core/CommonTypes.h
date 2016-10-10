@@ -41,7 +41,7 @@ typedef int SOCKET;
  * 			PDU LENGTH			|  PORT_SEQ  |   PORT
  * ------------------------------------------------------
  *
- * Additionally, the last 4 bits of PDU_LENGTH are reserved to the protocol,
+ * Additionally, the last 3 bits of PDU_LENGTH are reserved to the protocol,
  * while the last bit of PORT contains the fragmentation bit.
  */
 //TODO: update doc

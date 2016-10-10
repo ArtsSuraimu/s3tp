@@ -44,16 +44,12 @@ public:
     void setStatusInterface(StatusInterface * statusInterface);
 
     //S3TP Control APIs
-    void scheduleAcknowledgement(uint16_t ackSequence);
+    void scheduleAcknowledgement(uint16_t ackSequence, bool control);
     void scheduleReset(bool ack);
     void scheduleSetup(bool ack);
     void scheduleSync(uint8_t port, uint8_t channel, uint8_t options);
     void scheduleFin(uint8_t port, uint8_t channel, uint8_t options);
     void notifyAcknowledgement(uint16_t ackSequence);
-    //void notifySynchronization(bool synchronized);
-    void notifySetup();
-    void notifySync(uint8_t port);
-    void notifyFin(uint8_t port);
 
     //Public channel and link methods
     void notifyLinkAvailability(bool available);
@@ -75,14 +71,10 @@ private:
     //Control variables
     std::queue<S3TP_PACKET *> controlQueue; //High priority queue
 
-    //Sync variables
-    bool scheduled_sync;
-    S3TP_SYNC prototypeSync = S3TP_SYNC(); //Used only for initialization. Never afterwards
-    S3TP_PACKET syncPacket = S3TP_PACKET((char *)&prototypeSync, sizeof(S3TP_SYNC));
     //Ack variables
     bool scheduledAck;
     uint16_t expectedSequence;
-    S3TP_PACKET ackPacket = S3TP_PACKET(nullptr, 0);
+    S3TP_PACKET ackPacket = S3TP_PACKET(nullptr, 0); //Prototype ack packet
 
     //Buffer and port sequences
     std::map<uint8_t, uint8_t> to_consume_port_seq;

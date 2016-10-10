@@ -8,34 +8,20 @@
 TxModule::TxModule() {
     state = WAITING;
     global_seq_num = 0;
-    scheduled_sync = false;
     sendingFragments = false;
     active = false;
     retransmissionRequired = false;
     currentPort = 0;
     lastAcknowledgedSequence = 0;
+    expectedSequence = 0;
 
-    //Setting up unique sync packet
-    syncPacket.channel = DEFAULT_RESERVED_CHANNEL;
-    syncPacket.options = S3TP_OPTION_ARQ;
-    S3TP_HEADER * hdr = syncPacket.getHeader();
-    hdr->setFlags(S3TP_FLAG_CTRL);
-    hdr->setPort(0);
-    hdr->setGlobalSequence(0);
-    hdr->setSubSequence(0);
-    hdr->unsetMoreFragments();
-    hdr->seq_port = 0;
-
-    //Setting up unique ack packet
+    //Setup prototype ack packet
+    ackPacket.options = S3TP_ARQ;
     ackPacket.channel = DEFAULT_RESERVED_CHANNEL;
-    ackPacket.options = S3TP_OPTION_ARQ;
-    hdr = ackPacket.getHeader();
-    hdr->setFlags(S3TP_FLAG_ACK);
-    hdr->setPort(0);
-    hdr->setGlobalSequence(0);
-    hdr->setSubSequence(0);
-    hdr->unsetMoreFragments();
+    S3TP_HEADER * hdr = ackPacket.getHeader();
     hdr->seq_port = 0;
+    hdr->setAck(true);
+    hdr->unsetMoreFragments();
 
     //Timer setup
     syncTimer.tv_sec = SYNC_WAIT_TIME;
@@ -66,7 +52,7 @@ void TxModule::reset() {
     pthread_mutex_unlock(&tx_mutex);
 }
 
-void TxModule::synchronizeStatus() {
+/*void TxModule::synchronizeStatus() {
     //Not locking, as the method should only be called from a synchronized code block
     S3TP_SYNC * syncStructure = (S3TP_SYNC *)syncPacket.getPayload();
     std::fill(syncStructure->port_seq, syncStructure->port_seq + DEFAULT_MAX_OUT_PORTS, 0);
@@ -87,7 +73,7 @@ void TxModule::synchronizeStatus() {
     bool arq = S3TP_ARQ;
     LOG_DEBUG("TX: ----------- Sync Packet sent to receiver -----------");
     linkInterface->sendFrame(arq, syncPacket.channel, syncPacket.packet, syncPacket.getLength());
-}
+}*/
 
 void TxModule::sendAcknowledgement() {
     S3TP_HEADER * hdr = ackPacket.getHeader();
@@ -95,9 +81,9 @@ void TxModule::sendAcknowledgement() {
     hdr->crc = 0;
 
     bool arq = S3TP_ARQ;
-    LOG_DEBUG(std::string("TX: ----------- Ack Packet with sequence "
+    LOG_DEBUG(std::string("TX: ----------- Empty Ack Packet with sequence "
                           + std::to_string((int)expectedSequence) +" sent -----------"));
-    linkInterface->sendFrame(arq, syncPacket.channel, syncPacket.packet, syncPacket.getLength());
+    linkInterface->sendFrame(arq, ackPacket.channel, ackPacket.packet, ackPacket.getLength());
     //TODO: check if channel is available
 }
 
@@ -120,7 +106,7 @@ void TxModule::txRoutine() {
             continue;
         }
         //Sync has priority over any other packet
-        if (scheduled_sync && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
+        if (_isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
             if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
                 _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
             } else {
@@ -306,10 +292,13 @@ void TxModule::notifySynchronization(bool synchronized) {
  * Called usually after receiving a packet.
  * After scheduling an ack, the TX worker thread will either send out a dedicated ack packet
  * or simply put the scheduled acknowledgement in piggybacking to another packet.
+ *
  * @param ackSequence  The next expected sequence, to be sent to the receiver
+ * @param control  Flag indicating whether the ack is for a control message or not
  */
-void TxModule::scheduleAcknowledgement(uint16_t ackSequence) {
+void TxModule::scheduleAcknowledgement(uint16_t ackSequence, bool control) {
     pthread_mutex_lock(&tx_mutex);
+    //TODO: handle control
     scheduledAck = true;
     expectedSequence = ackSequence;
     //Notifying routine thread that a new ack message needs to be sent out
@@ -400,14 +389,46 @@ void TxModule::scheduleFin(uint8_t port, uint8_t channel, uint8_t options) {
     enqueuePacket(packet, 0, false, channel, options);
 }
 
-void notifyAcknowledgement(uint16_t ackSequence);
-void notifyInitialConnect();
-void notifySync(uint8_t port);
+/**
+ * Notify TX that an ack for the passed sequence number was received,
+ * hence all packets up to that point don't need to be retransmitted.
+ *
+ * @param ackSequence  The acknowledged sequence number (received previously)
+ */
+void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
+    S3TP_PACKET * pkt;
+    uint16_t ackRelativeSeq = 0, currentSeq = 0;
 
-void TxModule::notifyFin(uint8_t port) {
     pthread_mutex_lock(&tx_mutex);
-    //We respond to the fin packet
-    //TODO: implement
+
+    if (safeQueue.empty()) {
+        //Received a spurious (probably an older ACK coming in. Ignore it). Out queue is empty anyway.
+        pthread_mutex_unlock(&tx_mutex);
+        return;
+    }
+
+    ackRelativeSeq = ackSequence - lastAcknowledgedSequence;
+    if (ackRelativeSeq > 0 && ackRelativeSeq < MAX_TRANSMISSION_WINDOW) {
+        //Clean output safe queue
+        while (!safeQueue.empty()) {
+            pkt = safeQueue.front();
+            currentSeq = pkt->getHeader()->seq - lastAcknowledgedSequence;
+            if (currentSeq < ackRelativeSeq) {
+                safeQueue.pop_front();
+                delete pkt;
+            } else {
+                break;
+            }
+        }
+        retransmissionRequired = false;
+        lastAcknowledgedSequence = ackSequence;
+    } else if (ackSequence == lastAcknowledgedSequence) {
+        //We received the same ack several times. Some packets got dropped by the receiver therefore.
+        //TODO: handle
+        retransmissionRequired = true;
+    }
+
+    pthread_cond_signal(&tx_cond);
     pthread_mutex_unlock(&tx_mutex);
 }
 
