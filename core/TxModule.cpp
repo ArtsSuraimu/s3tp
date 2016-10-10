@@ -97,48 +97,19 @@ void TxModule::setStatusInterface(StatusInterface * statusInterface) {
 void TxModule::txRoutine() {
     double elapsed_time = 0;
     int milliseconds = 0;
+    S3TP_PACKET * packet;
 
     pthread_mutex_lock(&tx_mutex);
     while(active) {
+        // Checking if transceiver can currently transmit
         if (!linkInterface->getLinkStatus() || !_channelsAvailable()) {
             state = BLOCKED;
             pthread_cond_wait(&tx_cond, &tx_mutex);
             continue;
         }
-        //Sync has priority over any other packet
-        if (_isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
-            if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
-                _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
-            } else {
-                synchronizeStatus();
-                //Force synchronization
-                pthread_cond_wait(&tx_cond, &tx_mutex);
-                continue;
-            }
-        }
-        //Packets need to be retransmitted
-        if (retransmissionRequired) {
-            state = RUNNING;
-            retransmitPackets();
-            retransmissionRequired = false;
-            continue;
-        }
 
-        //TODO: refactor this
-        if (!outBuffer->packetsAvailable()) {
-            //In case no data is available, we may still want to send out an ack
-            if (scheduledAck && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
-                if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
-                    _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
-                } else {
-                    sendAcknowledgement();
-                    scheduledAck = false;
-                }
-            }
-            state = WAITING;
-            pthread_cond_wait(&tx_cond, &tx_mutex);
-            continue;
-        } else if (safeQueue.size() == MAX_TRANSMISSION_WINDOW) {
+        // Checking if transmission window size was reached
+        if (safeQueue.size() == MAX_TRANSMISSION_WINDOW) {
             //Maximum size of window reached, need to wait for acks
             state = BLOCKED;
             std::chrono::time_point<std::chrono::system_clock> start, now;
@@ -157,82 +128,157 @@ void TxModule::txRoutine() {
                     break;
                 }
                 //Filling ackTimer with new value
-                ackTimer.tv_sec = ACK_WAIT_TIME - (int)elapsed_time;
-                milliseconds = ((int)(elapsed_time * 1000)) % 1000;
+                ackTimer.tv_sec = ACK_WAIT_TIME - (int) elapsed_time;
+                milliseconds = ((int) (elapsed_time * 1000)) % 1000;
                 ackTimer.tv_nsec = milliseconds * 1000000;
             }
+            //TODO: implement limit timeout and queue flush
             continue;
         }
 
-        //Send normal data
-        state = RUNNING;
+        /* PRIORITY 1
+         * Fragmented messages in queue have priority over other messages,
+         * as their shared global sequence must not be overridden (messages cannot be split up) */
+        if (sendingFragments) {
+            packet = outBuffer->getNextPacket(currentPort);
+            if (packet == NULL) {
+                //Channels are currently blocked and packets cannot be sent
+                state = BLOCKED;
+                pthread_cond_wait(&tx_cond, &tx_mutex);
+                continue;
+            }
+            state = RUNNING;
+            _sendDataPacket(packet);
+            continue;
+        }
 
-        /*
-         * As buffer only returns ordered packets per queue, we cannot split up fragmented messages
-         * by randomly accessing different queues. This would mess up the global sequence number.
-         * Instead, if we are transmitting a fragmented message, we prioritize the queue
-         * which holds that message. If the channel gets blocked, we block as well.
-         */
-        S3TP_PACKET * packet = (sendingFragments) ?
-                               outBuffer->getNextPacket(currentPort) :
-                               outBuffer->getNextAvailablePacket();
+        /* PRIORITY 2
+         * Control messages are sent before normal messages. */
+        if (!controlQueue.empty() && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
+            if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
+                _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
+            } else {
+                packet = controlQueue.front();
+                _sendControlPacket(packet);
+                controlQueue.pop();
+            }
+        }
+        /* PRIORITY 3
+         * Packets need to be retransmitted.
+         * Once this starts, all packets will be sent out at once */
+        if (retransmissionRequired) {
+            state = RUNNING;
+            retransmitPackets();
+            retransmissionRequired = false;
+            continue;
+        }
 
-        if (packet == NULL) {
-            //Channels are currently blocked and packets cannot be sent
-            state = BLOCKED;
+        /* PRIORITY 4
+         * Attempt to send out normal data. These normal messages may
+         * retain acknowledgements, which are sent back in piggybacking */
+        if (outBuffer->packetsAvailable()) {
+            packet = outBuffer->getNextAvailablePacket();
+            if (packet == NULL) {
+                //Channels are currently blocked and packets cannot be sent
+                state = BLOCKED;
+                pthread_cond_wait(&tx_cond, &tx_mutex);
+                continue;
+            }
+            state = RUNNING;
+            _sendDataPacket(packet);
+            continue;
+        } else {
+            //In case no data is available, we may still want to send out an ack
+            if (scheduledAck && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
+                if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
+                    _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
+                } else {
+                    sendAcknowledgement();
+                    scheduledAck = false;
+                }
+            }
+            state = WAITING;
             pthread_cond_wait(&tx_cond, &tx_mutex);
             continue;
         }
-        S3TP_HEADER * hdr = packet->getHeader();
-        currentPort = hdr->getPort();
-        sendingFragments = hdr->moreFragments();
-
-        hdr->setGlobalSequence(global_seq_num);
-        if (!hdr->moreFragments()) {
-            //Need to increase the current global sequence
-            global_seq_num++;
-        }
-        to_consume_port_seq[hdr->getPort()]++;
-
-        //Acks can be sent in piggybacking
-        if (scheduledAck) {
-            hdr->setAck(true);
-            hdr->ack = expectedSequence;
-            scheduledAck = false;
-        }
-
-        //Saving packet inside history queue
-        safeQueue.push_back(packet);
-
-        pthread_mutex_unlock(&tx_mutex);
-
-        LOG_DEBUG(std::string("TX: Packet sent from port " + std::to_string((int)hdr->getPort())
-                              + " to Link Layer -> glob_seq: " + std::to_string((int)hdr->getGlobalSequence())
-                              + ", sub_seq: " + std::to_string((int)hdr->getSubSequence())
-                              + ", port_seq: " + std::to_string((int)hdr->seq_port)));
-
-        bool arq = packet->options & S3TP_ARQ;
-
-        if (linkInterface->sendFrame(arq, packet->channel, packet->packet, packet->getLength()) < 0) {
-            //Blacklisting channel
-            pthread_mutex_lock(&tx_mutex);
-            _setChannelAvailable(packet->channel, false);
-            //TODO: make this better somehow
-            retransmissionRequired = true;
-            pthread_mutex_unlock(&tx_mutex);
-        }
-
-        //Since a packet was just popped from the buffer, the queue is definitely available
-        if (outBuffer->getSizeOfQueue(hdr->getPort()) + 1 == MAX_QUEUE_SIZE
-            && statusInterface != nullptr) {
-            statusInterface->onOutputQueueAvailable(hdr->getPort());
-        }
-
-        pthread_mutex_lock(&tx_mutex);
     }
     pthread_mutex_unlock(&tx_mutex);
 
     pthread_exit(NULL);
+}
+
+void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
+    S3TP_HEADER * hdr = pkt->getHeader();
+    currentPort = hdr->getPort();
+    sendingFragments = hdr->moreFragments();
+
+    hdr->setGlobalSequence(global_seq_num);
+    if (!hdr->moreFragments()) {
+        //Need to increase the current global sequence
+        global_seq_num++;
+    }
+    to_consume_port_seq[hdr->getPort()]++;
+
+    //Acks can be sent in piggybacking
+    if (scheduledAck) {
+        hdr->setAck(true);
+        hdr->ack = expectedSequence;
+        scheduledAck = false;
+    }
+
+    //Saving packet inside history queue
+    safeQueue.push_back(pkt);
+
+    pthread_mutex_unlock(&tx_mutex);
+
+    LOG_DEBUG(std::string("TX: Data Packet sent from port " + std::to_string((int)hdr->getPort())
+                          + " to Link Layer -> glob_seq: " + std::to_string((int)hdr->getGlobalSequence())
+                          + ", sub_seq: " + std::to_string((int)hdr->getSubSequence())
+                          + ", port_seq: " + std::to_string((int)hdr->seq_port)));
+
+    bool arq = pkt->options & S3TP_ARQ;
+
+    if (linkInterface->sendFrame(arq, pkt->channel, pkt->packet, pkt->getLength()) < 0) {
+        //Blacklisting channel
+        pthread_mutex_lock(&tx_mutex);
+        _setChannelAvailable(pkt->channel, false);
+        //TODO: make this better somehow
+        retransmissionRequired = true;
+        pthread_mutex_unlock(&tx_mutex);
+    }
+
+    //Since a packet was just popped from the buffer, the queue is definitely available
+    if (outBuffer->getSizeOfQueue(hdr->getPort()) + 1 == MAX_QUEUE_SIZE
+        && statusInterface != nullptr) {
+        statusInterface->onOutputQueueAvailable(hdr->getPort());
+    }
+
+    pthread_mutex_lock(&tx_mutex);
+}
+
+void TxModule::_sendControlPacket(S3TP_PACKET *pkt) {
+    S3TP_HEADER * hdr = pkt->getHeader();
+    hdr->setGlobalSequence(global_seq_num++);
+
+    safeQueue.push_back(pkt);
+    pthread_mutex_unlock(&tx_mutex);
+
+    LOG_DEBUG(std::string("TX: Control Packet sent to Link Layer -> glob_seq: "
+                          + std::to_string((int)hdr->getGlobalSequence())
+                          + ", sub_seq: " + std::to_string((int)hdr->getSubSequence())));
+
+    bool arq = pkt->options & S3TP_ARQ;
+
+    if (linkInterface->sendFrame(arq, pkt->channel, pkt->packet, pkt->getLength()) < 0) {
+        //Blacklisting channel
+        pthread_mutex_lock(&tx_mutex);
+        _setChannelAvailable(pkt->channel, false);
+        //TODO: make this better somehow
+        retransmissionRequired = true;
+        pthread_mutex_unlock(&tx_mutex);
+    }
+
+    pthread_mutex_lock(&tx_mutex);
 }
 
 /*void TxModule::scheduleSync(uint8_t syncId) {
@@ -296,9 +342,9 @@ void TxModule::notifySynchronization(bool synchronized) {
  * @param ackSequence  The next expected sequence, to be sent to the receiver
  * @param control  Flag indicating whether the ack is for a control message or not
  */
-void TxModule::scheduleAcknowledgement(uint16_t ackSequence, bool control) {
+void TxModule::scheduleAcknowledgement(uint16_t ackSequence) {
     pthread_mutex_lock(&tx_mutex);
-    //TODO: handle control
+    //TODO: handle control ack?!
     scheduledAck = true;
     expectedSequence = ackSequence;
     //Notifying routine thread that a new ack message needs to be sent out
@@ -347,6 +393,7 @@ void TxModule::scheduleSetup(bool ack) {
 
     pthread_mutex_lock(&tx_mutex);
     controlQueue.push(packet);
+    pthread_cond_signal(&tx_cond);
     pthread_mutex_unlock(&tx_mutex);
 }
 

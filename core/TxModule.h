@@ -44,7 +44,7 @@ public:
     void setStatusInterface(StatusInterface * statusInterface);
 
     //S3TP Control APIs
-    void scheduleAcknowledgement(uint16_t ackSequence, bool control);
+    void scheduleAcknowledgement(uint16_t ackSequence);
     void scheduleReset(bool ack);
     void scheduleSetup(bool ack);
     void scheduleSync(uint8_t port, uint8_t channel, uint8_t options);
@@ -96,6 +96,8 @@ private:
     void synchronizeStatus();
     void sendAcknowledgement();
     void retransmitPackets();
+    void _sendDataPacket(S3TP_PACKET *pkt);
+    void _sendControlPacket(S3TP_PACKET *pkt);
 
     //Internal methods for accessing channels (do not use locking)
     bool _channelsAvailable();
