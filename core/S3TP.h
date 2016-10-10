@@ -86,7 +86,7 @@ private:
 
     //Transport methods
     virtual void onSynchronization(uint8_t syncId);
-    virtual void onReceivedSequence(uint16_t sequenceNumber);
+    virtual void onReceivedPacket(uint16_t sequenceNumber);
     virtual void onReceiveWindowFull(uint16_t lastValidSequence);
     virtual void onAcknowledgement(uint16_t sequenceAck);
 };

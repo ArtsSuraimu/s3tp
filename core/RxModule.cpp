@@ -174,7 +174,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     //No need for locking
     if (inBuffer->getSizeOfQueue(hdr->getPort()) >= MAX_QUEUE_SIZE) {
         //Dropping packet right away since queue is full anyway and force sender to retransmit
-        transportInterface->onReceivedSequence(expectedSequence);
+        transportInterface->onReceivedPacket(expectedSequence);
         return CODE_SERVER_QUEUE_FULL;
     }
 
@@ -186,10 +186,10 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
             expectedSequence = (uint16_t )((sequence & 0xFF00) + (1 << 8));
         }
         //We got the next expected packet. Sending ACK
-        transportInterface->onReceivedSequence(expectedSequence);
+        transportInterface->onReceivedPacket(expectedSequence);
     } else {
         //Dropping packet right away and sending ack for previous message
-        transportInterface->onReceivedSequence(expectedSequence);
+        transportInterface->onReceivedPacket(expectedSequence);
         return CODE_ERROR_INCONSISTENT_STATE;
     }
 

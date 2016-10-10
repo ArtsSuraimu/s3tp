@@ -373,7 +373,7 @@ void S3TP::onOutputQueueAvailable(uint8_t port) {
 /*
  * Transport callbacks
  */
-void S3TP::onReceivedSequence(uint16_t sequenceNumber) {
+void S3TP::onReceivedPacket(uint16_t sequenceNumber) {
     //Send ACK
     tx.scheduleAcknowledgement(sequenceNumber);
 }
