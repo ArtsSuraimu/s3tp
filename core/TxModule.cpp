@@ -14,8 +14,6 @@ TxModule::TxModule() {
     retransmissionRequired = false;
     currentPort = 0;
     lastAcknowledgedSequence = 0;
-    pendingReset = false;
-    pendingInitialConnect = false;
 
     //Setting up unique sync packet
     syncPacket.channel = DEFAULT_RESERVED_CHANNEL;
@@ -140,6 +138,7 @@ void TxModule::txRoutine() {
             continue;
         }
 
+        //TODO: refactor this
         if (!outBuffer->packetsAvailable()) {
             //In case no data is available, we may still want to send out an ack
             if (scheduledAck && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
@@ -322,16 +321,19 @@ void TxModule::scheduleAcknowledgement(uint16_t ackSequence) {
  * Need to perform a hard reset of the protocol status.
  * After reset request is sent out, the worker thread waits until it receives an acknowledgement.
  */
-void TxModule::scheduleReset() {
+void TxModule::scheduleReset(bool ack) {
+    S3TP_CONTROL control;
+    control.type = CONTROL_TYPE::RESET;
+    control.syncSequence = 0;
+    S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
+    S3TP_HEADER * hdr = packet->getHeader();
+    hdr->seq = 0;
+    hdr->setPort(0);
+    hdr->setAck(ack);
+    hdr->setCtrl(true);
+
     pthread_mutex_lock(&tx_mutex);
-    //Can only schedule one reset request at a time
-    if (!pendingReset) {
-        S3TP_CONTROL * control = new S3TP_CONTROL();
-        control->type = CONTROL_TYPE::RESET;
-        control->syncSequence = 0;
-        controlQueue.push(control);
-    }
-    pendingReset = true;
+    controlQueue.push(packet);
     pthread_mutex_unlock(&tx_mutex);
 }
 
@@ -340,16 +342,22 @@ void TxModule::scheduleReset() {
  * requests an initial sync. While all the sequence numbers on this side are typically set
  * to 0 at this stage, the other endpoint might have different sequences.
  * Upon receiving a response, the sequences expected by the other endpoint will be known.
+ *
+ * @param ack  An ack flag to be set, in case we need to acknowledge a received setup packet (3-way handshake).
  */
-void TxModule::scheduleSetup() {
+void TxModule::scheduleSetup(bool ack) {
+    S3TP_CONTROL control;
+    control.type = CONTROL_TYPE::SETUP;
+    control.syncSequence = 0;
+    S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
+    S3TP_HEADER * hdr = packet->getHeader();
+    hdr->seq = 0;
+    hdr->setPort(0);
+    hdr->setAck(ack);
+    hdr->setCtrl(true);
+
     pthread_mutex_lock(&tx_mutex);
-    if (!pendingInitialConnect) {
-        S3TP_CONTROL * control = new S3TP_CONTROL();
-        control->type = CONTROL_TYPE::SETUP;
-        control->syncSequence = 0;
-        controlQueue.push(control);
-    }
-    pendingInitialConnect = true;
+    controlQueue.push(packet);
     pthread_mutex_unlock(&tx_mutex);
 }
 
@@ -393,7 +401,6 @@ void TxModule::scheduleFin(uint8_t port, uint8_t channel, uint8_t options) {
 }
 
 void notifyAcknowledgement(uint16_t ackSequence);
-//void notifySynchronization(bool synchronized);
 void notifyInitialConnect();
 void notifySync(uint8_t port);
 

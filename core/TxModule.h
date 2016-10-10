@@ -45,8 +45,8 @@ public:
 
     //S3TP Control APIs
     void scheduleAcknowledgement(uint16_t ackSequence);
-    void scheduleReset();
-    void scheduleSetup();
+    void scheduleReset(bool ack);
+    void scheduleSetup(bool ack);
     void scheduleSync(uint8_t port, uint8_t channel, uint8_t options);
     void scheduleFin(uint8_t port, uint8_t channel, uint8_t options);
     void notifyAcknowledgement(uint16_t ackSequence);
@@ -73,9 +73,7 @@ private:
     StatusInterface * statusInterface;
 
     //Control variables
-    std::queue<S3TP_CONTROL *> controlQueue; //High priority queue
-    bool pendingReset;
-    bool pendingInitialConnect;
+    std::queue<S3TP_PACKET *> controlQueue; //High priority queue
 
     //Sync variables
     bool scheduled_sync;
