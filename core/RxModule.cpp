@@ -155,15 +155,13 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     }
 
     uint8_t flags = hdr->getFlags();
-    if (flags == 0) {
+    if (flags == S3TP_NO_FLAGS) {
         LOG_WARN("Unrecognized message type received. No flags were set");
         return CODE_ERROR_INVALID_TYPE;
     }
-    if (flags & S3TP_FLAG_SYNC) {
-        S3TP_SYNC *sync = (S3TP_SYNC *) packet->getPayload();
-        LOG_DEBUG("RX: ----------- Sync Packet received -----------");
-        synchronizeStatus(*sync);
-        return CODE_SUCCESS;
+    if (flags & S3TP_FLAG_CTRL) {
+        S3TP_CONTROL * control = (S3TP_CONTROL *)packet->getPayload();
+        return handleControlPacket(hdr, control);
     }
     if (flags & S3TP_FLAG_ACK) {
         LOG_DEBUG("RX: ----------- Ack received -----------");
@@ -223,6 +221,26 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         pthread_cond_signal(&available_msg_cond);
     }
     pthread_mutex_unlock(&rx_mutex);
+
+    return CODE_SUCCESS;
+}
+
+int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
+    //Handling control message
+    switch (control->type) {
+        case CONTROL_TYPE::SETUP:
+            LOG_DEBUG("RX: ----------- Setup Packet received -----------");
+            break;
+        case CONTROL_TYPE::SYNC:
+            LOG_DEBUG("RX: ----------- Sync Packet received -----------");
+            break;
+        case CONTROL_TYPE::FIN:
+            LOG_DEBUG("RX: ----------- Fin Packet received -----------");
+            break;
+        case CONTROL_TYPE::RESET:
+            LOG_DEBUG("RX: ----------- Reset Packet received -----------");
+            break;
+    }
 
     return CODE_SUCCESS;
 }

@@ -60,6 +60,7 @@ private:
     // LinkCallback
     void handleFrame(bool arq, int channel, const void* data, int length);
     int handleReceivedPacket(S3TP_PACKET * packet);
+    int handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control);
     virtual void handleBufferEmpty(int channel);
     void synchronizeStatus(S3TP_SYNC& sync);
     void handleAcknowledgement(uint16_t ackNumber);
