@@ -24,9 +24,6 @@ enum CONTROL_TYPE : uint8_t {
     RESET = 0x03
 };
 
-#define S3TP_SYNC_INITIATOR 0x00
-#define S3TP_SYNC_ACK 0xFF
-
 //Eigth channel should be reserved for now
 #define S3TP_VIRTUAL_CHANNELS 7
 
