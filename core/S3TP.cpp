@@ -7,7 +7,9 @@
 S3TP::S3TP() {
     pthread_mutex_init(&clients_mutex, NULL);
     pthread_mutex_init(&s3tp_mutex, NULL);
+    pthread_mutex_lock(&s3tp_mutex);
     reset();
+    pthread_mutex_unlock(&s3tp_mutex);
 }
 
 S3TP::~S3TP() {
@@ -33,10 +35,8 @@ S3TP::~S3TP() {
 }
 
 void S3TP::reset() {
-    pthread_mutex_lock(&s3tp_mutex);
     rx.reset();
     tx.reset();
-    pthread_mutex_unlock(&s3tp_mutex);
 }
 
 int S3TP::init(TRANSCEIVER_CONFIG * config) {
@@ -88,15 +88,6 @@ int S3TP::stop() {
     pthread_mutex_unlock(&s3tp_mutex);
 
     return CODE_SUCCESS;
-}
-
-void S3TP::synchronizeStatus(uint8_t syncId) {
-    pthread_mutex_lock(&clients_mutex);
-    //Sending a sync message only if we have at least one open port, otherwise it's meaningless
-    if (clients.size() > 0) {
-        tx.scheduleSync(syncId);
-    }
-    pthread_mutex_unlock(&clients_mutex);
 }
 
 Client * S3TP::getClientConnectedToPort(uint8_t port) {
@@ -306,7 +297,7 @@ void S3TP::onConnected(void * params) {
     clients[cli->getAppPort()] = cli;
     pthread_mutex_unlock(&clients_mutex);
     rx.openPort(cli->getAppPort());
-    synchronizeStatus(S3TP_SYNC_INITIATOR);
+    //TODO: implement sync
 }
 
 int S3TP::onApplicationMessage(void * data, size_t len, void * params) {
@@ -320,7 +311,7 @@ int S3TP::onApplicationMessage(void * data, size_t len, void * params) {
 void S3TP::onLinkStatusChanged(bool active) {
     tx.notifyLinkAvailability(active);
     if (active) {
-        synchronizeStatus(S3TP_SYNC_INITIATOR);
+        //TODO: implement sync in case needed
         notifyAvailabilityToClients();
     }
 }
@@ -345,16 +336,6 @@ void S3TP::onError(int error, void * params) {
     //TODO: implement
 }
 
-void S3TP::onSynchronization(uint8_t syncId) {
-    if (syncId == S3TP_SYNC_INITIATOR) {
-        // Sync init received. so we respond with an ack sync
-        synchronizeStatus(S3TP_SYNC_ACK);
-    } else {
-        //Otherwise it is an ack. We notify the tx module, that we are now correctly synchronized
-        tx.notifySynchronization(true);
-    }
-}
-
 void S3TP::onOutputQueueAvailable(uint8_t port) {
     pthread_mutex_lock(&clients_mutex);
 
@@ -373,6 +354,52 @@ void S3TP::onOutputQueueAvailable(uint8_t port) {
 /*
  * Transport callbacks
  */
+/**
+ * Received upon first initialization of remote module. Used only once.
+ * The same message is used to acknowledge a remote setup.
+ *
+ * @param ack  Additional ack flag set in the received setup packet
+ */
+void S3TP::onSetup(bool ack) {
+    pthread_mutex_lock(&s3tp_mutex);
+    if (ack) {
+        // In case we received an ack for sync
+        if (setupInitiated) {
+            // We were initiator of setup and got an ack. We still need to ack the ack (3-way last step)
+            tx.scheduleSetup(true);
+            setupPerformed = true;
+            setupInitiated = false;
+        } else {
+            // We didn't initiate the setup and got back the last ack of the 3-way handshake.
+            setupPerformed = true;
+        }
+    } else {
+        // We weren't initiator, we need to send back an ack
+        tx.scheduleSetup(true);
+        setupPerformed = false;
+    }
+    pthread_mutex_unlock(&s3tp_mutex);
+}
+
+/**
+ * Received in case something went wrong on either side.
+ * When received, internal state needs to be reset immediately.
+ *
+ * @param ack  Additional ack flag set in the received reset packet
+ */
+void S3TP::onReset(bool ack) {
+    pthread_mutex_lock(&s3tp_mutex);
+    if (ack && resetInitiated) {
+        // Reset complete. We're good to go
+        resetInitiated = false;
+    } else {
+        // Received a force reset. Resetting everything, then acknowledging it
+        reset();
+        tx.scheduleReset(true);
+    }
+    pthread_mutex_unlock(&s3tp_mutex);
+}
+
 void S3TP::onReceivedPacket(uint16_t sequenceNumber) {
     //Send ACK
     tx.scheduleAcknowledgement(sequenceNumber);
@@ -386,3 +413,8 @@ void S3TP::onAcknowledgement(uint16_t sequenceAck) {
     //Notify TX that an ack was received
     tx.notifyAcknowledgement(sequenceAck);
 }
+
+//TODO: implement
+virtual void onConnectionRequest(uint8_t port, uint8_t channel, uint8_t portSequence);
+virtual void onConnectionAccept(uint8_t port, uint8_t portSequence);
+virtual void onConnectionClose(uint8_t port);

@@ -57,7 +57,6 @@ private:
 
     //Generic methods
     void reset();
-    void synchronizeStatus(uint8_t syncId);
 
     //TxModule
     TxModule tx;
@@ -78,6 +77,10 @@ private:
     virtual void onConnected(void * params);
     virtual int onApplicationMessage(void * data, size_t len, void * params);
 
+    //Protocol internal status
+    bool setupPerformed, setupInitiated;
+    bool resetInitiated;
+
     //Status check
     virtual void onLinkStatusChanged(bool active);
     virtual void onChannelStatusChanged(uint8_t channel, bool active);
@@ -85,10 +88,14 @@ private:
     virtual void onOutputQueueAvailable(uint8_t port);
 
     //Transport methods
-    virtual void onSynchronization(uint8_t syncId);
+    virtual void onSetup(bool ack);
     virtual void onReceivedPacket(uint16_t sequenceNumber);
     virtual void onReceiveWindowFull(uint16_t lastValidSequence);
     virtual void onAcknowledgement(uint16_t sequenceAck);
+    virtual void onConnectionRequest(uint8_t port, uint8_t channel, uint8_t portSequence);
+    virtual void onConnectionAccept(uint8_t port, uint8_t portSequence);
+    virtual void onConnectionClose(uint8_t port);
+    virtual void onReset(bool ack);
 };
 
 
