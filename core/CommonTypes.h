@@ -195,15 +195,6 @@ struct S3TP_CONTROL {
     uint16_t syncSequence;
 };
 
-struct S3TP_SYNC {
-	/**
-	 * By default, the ID is 0 if the sender is the initiator,
-	 * FF if the sender responds to a sync */
-	uint8_t syncId;
-	uint8_t tx_global_seq = 0;
-	uint8_t port_seq [DEFAULT_MAX_OUT_PORTS] = {0};
-};
-
 #pragma pack(pop)
 
 #endif /* CORE_S3TP_TYPES_H_ */
