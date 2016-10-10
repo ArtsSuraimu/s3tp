@@ -60,17 +60,11 @@ int main(int argc, char* argv[]) {
             break;
         }
         connector.send((void *)testS.data(), testS.length());
-
-        /*if ((i % 128) == 0) {
-            sleep(20);
-        }
-        testS = "thisisarandomlonglongteststringwhichweneedfortestingpackets";
-        connector.send((void *)testS.data(), testS.length());
-        i++;
-        sleep(1);*/
     }
 
     connector.closeConnection();
+
+    std::cout << "Lost connection to s3tpd. Exiting" << std::endl;
 
     return 0;
 }
