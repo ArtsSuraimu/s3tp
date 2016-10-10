@@ -230,15 +230,25 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
     switch (control->type) {
         case CONTROL_TYPE::SETUP:
             LOG_DEBUG("RX: ----------- Setup Packet received -----------");
+            // Forcefully clearing everything that was in queue up until now
+            // and setting the new expected sequence number
+            flushQueues();
+            this->expectedSequence = control->syncSequence;
+            // No need to set all port sequences to 0, as each current
+            // port sequence will be received upon creating a connection
             break;
         case CONTROL_TYPE::SYNC:
             LOG_DEBUG("RX: ----------- Sync Packet received -----------");
+            // Notify s3tp that a new connection is being established
             break;
         case CONTROL_TYPE::FIN:
             LOG_DEBUG("RX: ----------- Fin Packet received -----------");
+            // Notify s3tp that a connection is being closed
             break;
         case CONTROL_TYPE::RESET:
             LOG_DEBUG("RX: ----------- Reset Packet received -----------");
+            // Hard reset of the whole internal status
+            reset();
             break;
     }
 
@@ -263,6 +273,12 @@ void RxModule::synchronizeStatus(S3TP_SYNC& sync) {
     pthread_mutex_unlock(&rx_mutex);
 }
 
+/**
+ * Handling received ack. Based on this, Tx Module will either know that a packet has successfully
+ * been received, or schedule a retransmission.
+ *
+ * @param ackNumber  Complete sequence number of the message
+ */
 void RxModule::handleAcknowledgement(uint16_t ackNumber) {
     transportInterface->onAcknowledgement(ackNumber);
 }
@@ -369,30 +385,12 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
 
 void RxModule::flushQueues() {
     std::set<int> activeQueues = inBuffer->getActiveQueues();
-    uint8_t pktGlobalSequence;
     //Will flush only queues which currently hold data
     for (auto port : activeQueues) {
-        PriorityQueue<S3TP_PACKET*>* queue = inBuffer->getQueue(port);
-        if (queue->isEmpty()) {
-            LOG_DEBUG("WTF????");
-            //TODO: there's some serious error here
-            continue;
+        if (available_messages.find(port) == available_messages.end()) {
+            inBuffer->clearQueueForPort(port);
         }
-        S3TP_PACKET * packet = queue->peek();
-        pktGlobalSequence = packet->getHeader()->getGlobalSequence() - to_consume_global_seq;
-        /*if (pktGlobalSequence >= MAX_REORDERING_WINDOW) {
-            // pktGlobalSequence < glob_seq
-            // Packet is too old, clearing the queue
-            inBuffer->clearQueueForPort((uint8_t) port);
-            //TODO: send error to application
-            continue;
-        }*/
     }
-
-    //Updating current global sequence
-    /*if (highestReceivedGlobalSeq - MAX_REORDERING_WINDOW != to_consume_global_seq) {
-        LOG_INFO("Packets were lost somewhere...");
-    }*/
 }
 
 int RxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
@@ -414,6 +412,7 @@ int RxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
 
 bool RxModule::isElementValid(S3TP_PACKET * element) {
     //Not needed for Rx Module. Return true by default
+    //TODO: implement
     return true;
 }
 
