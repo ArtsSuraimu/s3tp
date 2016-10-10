@@ -245,10 +245,18 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
             current_port_sequence[hdr->getPort()] = hdr->seq_port;
             LOG_DEBUG(std::string("Sequence on port " + std::to_string(hdr->getPort())
                                   + " synchronized. New expected value: " + std::to_string(hdr->seq_port)));
+            if (flags & S3TP_FLAG_ACK) {
+                //This is a connection accept message
+                transportInterface->onConnectionAccept(hdr->getPort(), hdr->seq);
+            } else {
+                //TODO: use different channel. Should get it from client directly
+                transportInterface->onConnectionRequest(hdr->getPort(), 0, hdr->seq);
+            }
             break;
         case CONTROL_TYPE::FIN:
             LOG_DEBUG("RX: ----------- Fin Packet received -----------");
             // Notify s3tp that a connection is being closed
+            transportInterface->onConnectionClose(hdr->getPort());
             break;
         case CONTROL_TYPE::RESET:
             LOG_DEBUG("RX: ----------- Reset Packet received -----------");

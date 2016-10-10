@@ -415,11 +415,15 @@ void S3TP::onAcknowledgement(uint16_t sequenceAck) {
 }
 
 //TODO: implement
-void S3TP::onConnectionRequest(uint8_t port, uint8_t channel, uint8_t portSequence) {
+void S3TP::onConnectionRequest(uint8_t port, uint8_t channel, uint16_t sequenceNumber) {
     rx.openPort(port);
+    uint8_t defaultOpts = S3TP_ARQ;
+    //TODO: send seq num as well, so we can use it as an ack in piggybacking
+    tx.scheduleSync(port, channel, defaultOpts);
 }
 
-void S3TP::onConnectionAccept(uint8_t port, uint8_t sequenceNumber) {
+void S3TP::onConnectionAccept(uint8_t port, uint16_t sequenceNumber) {
+    tx.scheduleAcknowledgement(sequenceNumber);
     //TODO: notify client that connection is now open
 }
 
