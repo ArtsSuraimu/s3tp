@@ -93,7 +93,7 @@ private:
     virtual void onReceiveWindowFull(uint16_t lastValidSequence);
     virtual void onAcknowledgement(uint16_t sequenceAck);
     virtual void onConnectionRequest(uint8_t port, uint8_t channel, uint8_t portSequence);
-    virtual void onConnectionAccept(uint8_t port, uint8_t portSequence);
+    virtual void onConnectionAccept(uint8_t port, uint8_t sequenceNumber);
     virtual void onConnectionClose(uint8_t port);
     virtual void onReset(bool ack);
 };

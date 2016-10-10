@@ -415,6 +415,16 @@ void S3TP::onAcknowledgement(uint16_t sequenceAck) {
 }
 
 //TODO: implement
-virtual void onConnectionRequest(uint8_t port, uint8_t channel, uint8_t portSequence);
-virtual void onConnectionAccept(uint8_t port, uint8_t portSequence);
-virtual void onConnectionClose(uint8_t port);
+void S3TP::onConnectionRequest(uint8_t port, uint8_t channel, uint8_t portSequence) {
+    rx.openPort(port);
+}
+
+void S3TP::onConnectionAccept(uint8_t port, uint8_t sequenceNumber) {
+    //TODO: notify client that connection is now open
+}
+
+void S3TP::onConnectionClose(uint8_t port) {
+    //No 4-way close. We know the connection has been closed and that's it.
+    rx.closePort(port);
+    //TODO: notify client
+}
