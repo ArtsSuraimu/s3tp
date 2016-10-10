@@ -46,12 +46,12 @@ public:
     //S3TP Control APIs
     void scheduleAcknowledgement(uint16_t ackSequence);
     void scheduleReset();
-    void scheduleInitialConnect();
+    void scheduleSetup();
     void scheduleSync(uint8_t port, uint8_t channel, uint8_t options);
     void scheduleFin(uint8_t port, uint8_t channel, uint8_t options);
     void notifyAcknowledgement(uint16_t ackSequence);
     //void notifySynchronization(bool synchronized);
-    void notifyInitialConnect();
+    void notifySetup();
     void notifySync(uint8_t port);
     void notifyFin(uint8_t port);
 

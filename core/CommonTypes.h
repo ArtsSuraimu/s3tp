@@ -18,7 +18,7 @@
 #define S3TP_FLAG_CTRL 0x04
 
 enum CONTROL_TYPE : uint8_t {
-    INITIAL_CONNECT = 0x00,
+    SETUP = 0x00,
     SYNC = 0x01,
     FIN = 0x02,
     RESET = 0x03

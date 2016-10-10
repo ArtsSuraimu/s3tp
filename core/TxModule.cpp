@@ -341,11 +341,11 @@ void TxModule::scheduleReset() {
  * to 0 at this stage, the other endpoint might have different sequences.
  * Upon receiving a response, the sequences expected by the other endpoint will be known.
  */
-void TxModule::scheduleInitialConnect() {
+void TxModule::scheduleSetup() {
     pthread_mutex_lock(&tx_mutex);
     if (!pendingInitialConnect) {
         S3TP_CONTROL * control = new S3TP_CONTROL();
-        control->type = CONTROL_TYPE::INITIAL_CONNECT;
+        control->type = CONTROL_TYPE::SETUP;
         control->syncSequence = 0;
         controlQueue.push(control);
     }
