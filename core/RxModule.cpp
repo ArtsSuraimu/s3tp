@@ -226,6 +226,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
 }
 
 int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
+    uint8_t flags = hdr->getFlags();
     //Handling control message
     switch (control->type) {
         case CONTROL_TYPE::SETUP:
@@ -233,13 +234,17 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
             // Forcefully clearing everything that was in queue up until now
             // and setting the new expected sequence number
             flushQueues();
-            this->expectedSequence = control->syncSequence;
+            expectedSequence = control->syncSequence;
+            transportInterface->onSetup((bool)(flags & S3TP_FLAG_ACK));
             // No need to set all port sequences to 0, as each current
             // port sequence will be received upon creating a connection
             break;
         case CONTROL_TYPE::SYNC:
             LOG_DEBUG("RX: ----------- Sync Packet received -----------");
             // Notify s3tp that a new connection is being established
+            current_port_sequence[hdr->getPort()] = hdr->seq_port;
+            LOG_DEBUG(std::string("Sequence on port " + std::to_string(hdr->getPort())
+                                  + " synchronized. New expected value: " + std::to_string(hdr->seq_port)));
             break;
         case CONTROL_TYPE::FIN:
             LOG_DEBUG("RX: ----------- Fin Packet received -----------");
@@ -247,30 +252,12 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
             break;
         case CONTROL_TYPE::RESET:
             LOG_DEBUG("RX: ----------- Reset Packet received -----------");
-            // Hard reset of the whole internal status
-            reset();
+            // Hard reset of the whole internal statatus will be handled by s3tp module
+            transportInterface->onReset((bool)(flags & S3TP_FLAG_ACK));
             break;
     }
 
     return CODE_SUCCESS;
-}
-
-void RxModule::synchronizeStatus(S3TP_SYNC& sync) {
-    pthread_mutex_lock(&rx_mutex);
-    for (int i=0; i<DEFAULT_MAX_OUT_PORTS; i++) {
-        if (sync.port_seq[i] != 0) {
-            current_port_sequence[i] = sync.port_seq[i];
-        }
-    }
-    //TODO: clear useless stuff
-    //Check all queues and remove useless stuff
-    //uint8_t seq1 = sync.tx_global_seq - to_consume_global_seq;
-    //uint8_t seq2 = lastReceivedGlobalSeq - to_consume_global_seq;
-
-    //Notify main module
-    LOG_DEBUG("Receiver sequences synchronized correctly");
-    transportInterface->onSynchronization(sync.syncId);
-    pthread_mutex_unlock(&rx_mutex);
 }
 
 /**
