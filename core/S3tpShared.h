@@ -50,11 +50,14 @@
 /*
  * Definition of control message types (including ack/nack bytes)
  */
-enum AppControlMessageType : uint8_t {
-    ACK = 0x00,
-    NACK = 0x0F,
-    AVAILABLE = 0xF0,
-    RESERVED = 0xFF
+enum AppControlMessageType {
+    ACK,
+    NACK,
+    LISTEN,
+    CONN_UP,
+    CONN_DOWN,
+    AVAILABLE,
+    RESERVED
 };
 
 #define SAFE_TRANSMISSION_COUNT 3
@@ -65,8 +68,6 @@ enum AppControlMessageType : uint8_t {
  * Typedefs
  */
 typedef int SOCKET;
-
-typedef void (*S3TP_CALLBACK) (char*, size_t);
 
 typedef struct tag_s3tp_config {
     uint8_t port;
