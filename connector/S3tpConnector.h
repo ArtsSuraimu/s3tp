@@ -34,9 +34,13 @@ public:
     char * recvRaw(size_t * len, int * error);
     int recv(void * buffer, size_t len);
     void closeConnection();
+    bool isBound();
     bool isConnected();
+    int listen();
+    int connectToRemoteHost();
 private:
     int socketDescriptor;
+    bool bound;
     bool connected;
     bool lastMessageAck;
     bool s3tpBufferFull;
