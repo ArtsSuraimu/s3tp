@@ -11,6 +11,7 @@ TxModule::TxModule() {
     sendingFragments = false;
     active = false;
     retransmissionRequired = false;
+    scheduledAck = false;
     currentPort = 0;
     lastAcknowledgedSequence = 0;
     expectedSequence = 0;
@@ -47,7 +48,14 @@ TxModule::~TxModule() {
 
 void TxModule::reset() {
     pthread_mutex_lock(&tx_mutex);
+    state = WAITING;
     global_seq_num = 0;
+    sendingFragments = false;
+    retransmissionRequired = false;
+    scheduledAck = false;
+    currentPort = 0;
+    lastAcknowledgedSequence = 0;
+    expectedSequence = 0;
     port_sequence.clear();
     to_consume_port_seq.clear();
     outBuffer->clear();
@@ -94,10 +102,11 @@ void TxModule::txRoutine() {
                 _timedWait();
                 if (elapsedTime >= ACK_WAIT_TIME) {
                     retransmissionRequired = true;
-                    break;
-                } else if (retransmissionRequired) {
+                    //TODO: logic error, need to go to retransmission somehow
                     break;
                 }
+                //Go for another iteration
+                break;
             }
             continue;
         }
@@ -197,7 +206,8 @@ void TxModule::_timedWait() {
 
     //Update time to wait
     now = std::chrono::system_clock::now();
-    elapsedTime = (now - start).count();
+    auto difference = std::chrono::duration_cast<std::chrono::seconds>(now - start);
+    elapsedTime = difference.count();
     if (elapsedTime >= ACK_WAIT_TIME) {
         //Timer already expired
         return;
@@ -211,7 +221,8 @@ void TxModule::_timedWait() {
 
     //Update elapsed time for control logic
     now = std::chrono::system_clock::now();
-    elapsedTime = (now - start).count();
+    difference = std::chrono::duration_cast<std::chrono::seconds>(now - start);
+    elapsedTime = difference.count();
 }
 
 void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
@@ -282,10 +293,9 @@ void TxModule::_sendControlPacket(S3TP_PACKET *pkt) {
         _setChannelAvailable(pkt->channel, false);
         //TODO: make this better somehow
         retransmissionRequired = true;
-        pthread_mutex_unlock(&tx_mutex);
+    } else {
+        pthread_mutex_lock(&tx_mutex);
     }
-
-    pthread_mutex_lock(&tx_mutex);
 }
 
 /**
@@ -315,15 +325,20 @@ void TxModule::scheduleReset(bool ack) {
     control.type = CONTROL_TYPE::RESET;
     control.syncSequence = 0;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
+    packet->channel = DEFAULT_RESERVED_CHANNEL;
+    packet->options = S3TP_ARQ;
     S3TP_HEADER * hdr = packet->getHeader();
     hdr->seq = 0;
+    hdr->seq_port = 0;
     hdr->setPort(0);
     hdr->setAck(ack);
     hdr->setCtrl(true);
+    hdr->crc = calc_checksum((char *)&control, sizeof(S3TP_CONTROL));
 
     pthread_mutex_lock(&tx_mutex);
     controlQueue.push(packet);
     pthread_mutex_unlock(&tx_mutex);
+    LOG_DEBUG("TX: Scheduled RESET Packet");
 }
 
 /**
@@ -339,16 +354,21 @@ void TxModule::scheduleSetup(bool ack) {
     control.type = CONTROL_TYPE::SETUP;
     control.syncSequence = 0;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
+    packet->channel = DEFAULT_RESERVED_CHANNEL;
+    packet->options = S3TP_ARQ;
     S3TP_HEADER * hdr = packet->getHeader();
     hdr->seq = 0;
+    hdr->seq_port = 0;
     hdr->setPort(0);
     hdr->setAck(ack);
     hdr->setCtrl(true);
+    hdr->crc = calc_checksum((char *)&control, sizeof(S3TP_CONTROL));
 
     pthread_mutex_lock(&tx_mutex);
     controlQueue.push(packet);
     pthread_cond_signal(&tx_cond);
     pthread_mutex_unlock(&tx_mutex);
+    LOG_DEBUG("TX: Scheduled SETUP Packet");
 }
 
 /**
@@ -370,6 +390,7 @@ void TxModule::scheduleSync(uint8_t port, uint8_t channel, uint8_t options) {
     packet->options = options;
 
     enqueuePacket(packet, 0, false, channel, options);
+    LOG_DEBUG(std::string("TX: Scheduled SYNC Packet for port " + std::to_string((int)port)));
 }
 
 /**
@@ -388,6 +409,7 @@ void TxModule::scheduleFin(uint8_t port, uint8_t channel, uint8_t options) {
     packet->options = options;
 
     enqueuePacket(packet, 0, false, channel, options);
+    LOG_DEBUG(std::string("TX: Scheduled FIN Packet for port " + std::to_string((int)port)));
 }
 
 /**
@@ -440,6 +462,8 @@ void TxModule::retransmitPackets() {
     S3TP_HEADER * hdr;
     uint16_t relativePktSeq;
 
+    LOG_DEBUG("TX: Starting retransmission of lost packets");
+
     for (auto const& pkt: safeQueue) {
         hdr = pkt->getHeader();
         hdr->setAck(false);
@@ -458,9 +482,13 @@ void TxModule::retransmitPackets() {
 
         bool arq = pkt->options & S3TP_ARQ;
 
-        if (linkInterface->sendFrame(arq, pkt->channel, pkt->packet, pkt->getLength()) < 0) {
-            //Send frame failed. Either underlying buffer is full or channel is broken
-            //TODO: implement safety mechanism
+        while (linkInterface->getBufferFull(pkt->channel)) {
+            pthread_cond_wait(&tx_cond, &tx_mutex);
+            if (linkInterface->sendFrame(arq, pkt->channel, pkt->packet, pkt->getLength()) < 0) {
+                //Send frame failed. Either underlying buffer is full or channel is broken
+                //TODO: implement safety mechanism
+                continue;
+            }
         }
     }
 }
