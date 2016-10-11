@@ -13,7 +13,7 @@
 #include "CommonTypes.h"
 #include "PolicyActor.h"
 #include <pthread.h>
-#include <assert.h>
+#include <cassert>
 
 #define MB 1 << 20
 #define MAX_QUEUE_SIZE (1*MB)
