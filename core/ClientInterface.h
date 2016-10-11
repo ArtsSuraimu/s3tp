@@ -7,8 +7,8 @@
 
 class ClientInterface {
 public:
-    virtual void onDisconnected(void * params) = 0;
-    virtual void onConnected(void * params) = 0;
+    virtual void onApplicationDisconnected(void *params) = 0;
+    virtual void onApplicationConnected(void *params) = 0;
     virtual int onApplicationMessage(void * data, size_t len, void * params) = 0;
 };
 

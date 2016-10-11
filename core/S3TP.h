@@ -73,8 +73,8 @@ private:
     std::vector<uint8_t> disconnectedClients;
     int checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t msg_len);
     void notifyAvailabilityToClients();
-    virtual void onDisconnected(void * params);
-    virtual void onConnected(void * params);
+    virtual void onApplicationDisconnected(void *params);
+    virtual void onApplicationConnected(void *params);
     virtual int onApplicationMessage(void * data, size_t len, void * params);
 
     //Protocol internal status

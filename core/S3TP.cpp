@@ -283,7 +283,7 @@ void S3TP::notifyAvailabilityToClients() {
 /*
  * Client Interface logic
  */
-void S3TP::onDisconnected(void * params) {
+void S3TP::onApplicationDisconnected(void *params) {
     Client * cli = (Client *)params;
     pthread_mutex_lock(&clients_mutex);
     disconnectedClients.push_back(cli->getAppPort());
@@ -291,7 +291,7 @@ void S3TP::onDisconnected(void * params) {
     rx.closePort(cli->getAppPort());
 }
 
-void S3TP::onConnected(void * params) {
+void S3TP::onApplicationConnected(void *params) {
     Client * cli = (Client * )params;
     pthread_mutex_lock(&clients_mutex);
     clients[cli->getAppPort()] = cli;
