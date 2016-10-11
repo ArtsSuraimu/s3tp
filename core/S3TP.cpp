@@ -288,7 +288,6 @@ void S3TP::onApplicationDisconnected(void *params) {
     pthread_mutex_lock(&clients_mutex);
     disconnectedClients.push_back(cli->getAppPort());
     pthread_mutex_unlock(&clients_mutex);
-    rx.closePort(cli->getAppPort());
 }
 
 void S3TP::onApplicationConnected(void *params) {
@@ -296,13 +295,23 @@ void S3TP::onApplicationConnected(void *params) {
     pthread_mutex_lock(&clients_mutex);
     clients[cli->getAppPort()] = cli;
     pthread_mutex_unlock(&clients_mutex);
-    rx.openPort(cli->getAppPort());
-    //TODO: implement sync
 }
 
 int S3TP::onApplicationMessage(void * data, size_t len, void * params) {
     Client * cli = (Client *)params;
     return sendToLinkLayer(cli->getVirtualChannel(), cli->getAppPort(), data, len, cli->getOptions());
+}
+
+void S3TP::onConnectToHost(void *params) {
+    Client * cli = (Client *)params;
+    //Scheduling 3-way handshake
+    tx.scheduleSync(cli->getAppPort(), cli->getVirtualChannel(), cli->getOptions());
+}
+
+void S3TP::onDisconnectFromHost(void *params) {
+    Client * cli = (Client *)params;
+    //Scheduling connection teardown
+    tx.scheduleFin(cli->getAppPort(), cli->getVirtualChannel(), cli->getOptions());
 }
 
 /*
@@ -424,11 +433,23 @@ void S3TP::onConnectionRequest(uint8_t port, uint8_t channel, uint16_t sequenceN
 
 void S3TP::onConnectionAccept(uint8_t port, uint16_t sequenceNumber) {
     tx.scheduleAcknowledgement(sequenceNumber);
-    //TODO: notify client that connection is now open
+    //Notify client that connection is now open
+    pthread_mutex_lock(&clients_mutex);
+    Client * cli = clients[port];
+    if (cli != nullptr) {
+        cli->acceptConnect();
+    }
+    pthread_mutex_unlock(&clients_mutex);
 }
 
 void S3TP::onConnectionClose(uint8_t port) {
     //No 4-way close. We know the connection has been closed and that's it.
     rx.closePort(port);
-    //TODO: notify client
+    //Notify client that connection is now closed
+    pthread_mutex_lock(&clients_mutex);
+    Client * cli = clients[port];
+    if (cli != nullptr) {
+        cli->closeConnection();
+    }
+    pthread_mutex_unlock(&clients_mutex);
 }

@@ -90,7 +90,7 @@ void Client::tryConnect() {
     pthread_mutex_lock(&client_mutex);
     connecting = true;
     if (client_if != NULL) {
-        client_if->onConnectToHost();
+        client_if->onConnectToHost(this);
     }
     pthread_mutex_unlock(&client_mutex);
 }
@@ -104,7 +104,7 @@ void Client::disconnect() {
     pthread_mutex_lock(&client_mutex);
     connected = false;
     if (client_if != NULL) {
-        client_if->onDisconnectFromHost();
+        client_if->onDisconnectFromHost(this);
     }
     pthread_mutex_unlock(&client_mutex);
 }

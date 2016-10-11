@@ -76,6 +76,8 @@ private:
     virtual void onApplicationDisconnected(void *params);
     virtual void onApplicationConnected(void *params);
     virtual int onApplicationMessage(void * data, size_t len, void * params);
+    virtual void onConnectToHost(void *params);
+    virtual void onDisconnectFromHost(void *params);
 
     //Protocol internal status
     bool setupPerformed, setupInitiated;
