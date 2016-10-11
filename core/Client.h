@@ -17,19 +17,29 @@ class Client {
 private:
     pthread_t client_thread;
     pthread_mutex_t client_mutex;
+    ClientInterface * client_if;
+
+    //Binding to port and unix socket
     SOCKET socket;
-    bool connected;
+    bool bound;
     uint8_t app_port;
     uint8_t virtual_channel;
     uint8_t options;
-    ClientInterface * client_if;
+    bool isBound();
+    void unbind();
+    void handleUnbind();
 
-    bool isConnected();
-    void closeConnection();
-    void handleConnectionClosed();
+    //Actual connection to remote socket
+    bool listening;
+    bool connected;
+    bool connecting;
+    void tryConnect();
+    void disconnect();
+    void listen();
 
     void clientRoutine();
     static void * staticClientRoutine(void * args);
+    int handleControlMessage();
 public:
     Client(SOCKET socket, S3TP_CONFIG config, ClientInterface * listener);
     uint8_t getAppPort();
@@ -38,6 +48,11 @@ public:
     int send(const void * data, size_t len);
     int sendControlMessage(S3TP_CONNECTOR_CONTROL message);
     void kill();
+    bool acceptConnect();
+    void failedConnect();
+    bool isConnected();
+    bool isListening();
+    void closeConnection();
 };
 
 #endif //S3TP_S3TP_CLIENT_H
