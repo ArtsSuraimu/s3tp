@@ -37,6 +37,7 @@ S3TP::~S3TP() {
 void S3TP::reset() {
     rx.reset();
     tx.reset();
+    setupPerformed = false;
 }
 
 int S3TP::init(TRANSCEIVER_CONFIG * config) {
@@ -295,6 +296,12 @@ void S3TP::onApplicationConnected(void *params) {
     pthread_mutex_lock(&clients_mutex);
     clients[cli->getAppPort()] = cli;
     pthread_mutex_unlock(&clients_mutex);
+    //Start setup if first time starting the protocol
+    pthread_mutex_lock(&s3tp_mutex);
+    if (!setupPerformed) {
+        tx.scheduleSetup(false);
+    }
+    pthread_mutex_unlock(&s3tp_mutex);
 }
 
 int S3TP::onApplicationMessage(void * data, size_t len, void * params) {
