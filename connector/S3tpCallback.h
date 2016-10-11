@@ -9,6 +9,8 @@
 
 class S3tpCallback {
 public:
+    virtual void onConnectionUp() = 0;
+    virtual void onConnectionDown(int code) = 0;
     virtual void onNewMessage(char * data, size_t len) = 0;
     virtual void onError(int code, char * error) = 0;
 };
