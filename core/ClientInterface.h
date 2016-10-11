@@ -10,8 +10,8 @@ public:
     virtual void onApplicationDisconnected(void *params) = 0;
     virtual void onApplicationConnected(void *params) = 0;
     virtual int onApplicationMessage(void * data, size_t len, void * params) = 0;
-    virtual int onConnectToHost() = 0;
-    virtual int onDisconnectFromHost() = 0;
+    virtual void onConnectToHost(void *params) = 0;
+    virtual void onDisconnectFromHost(void *params) = 0;
 };
 
 #endif //S3TP_CONNECTION_LISTENER_H
