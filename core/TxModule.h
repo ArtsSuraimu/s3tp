@@ -22,8 +22,8 @@
 
 #define DEFAULT_RESERVED_CHANNEL 0
 
-#define SYNC_WAIT_TIME 5
 #define ACK_WAIT_TIME 5
+#define MAX_RETRANSMISSION_COUNT 2
 
 class TxModule : public PolicyActor<S3TP_PACKET *> {
 public:
@@ -90,6 +90,9 @@ private:
     //Transmission control timer
     struct timespec ackTimer;
     struct timespec syncTimer;
+    std::chrono::time_point<std::chrono::system_clock> start, now;
+    double elapsedTime;
+    int retransmissionCount;
 
     void txRoutine();
     static void * staticTxRoutine(void * args);
@@ -97,6 +100,7 @@ private:
     void retransmitPackets();
     void _sendDataPacket(S3TP_PACKET *pkt);
     void _sendControlPacket(S3TP_PACKET *pkt);
+    void _timedWait();
 
     //Internal methods for accessing channels (do not use locking)
     bool _channelsAvailable();

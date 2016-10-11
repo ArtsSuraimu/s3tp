@@ -24,8 +24,10 @@ TxModule::TxModule() {
     hdr->unsetMoreFragments();
 
     //Timer setup
-    syncTimer.tv_sec = SYNC_WAIT_TIME;
-    syncTimer.tv_nsec = 0;
+    ackTimer.tv_sec = ACK_WAIT_TIME;
+    ackTimer.tv_nsec = 0;
+    elapsedTime = 0;
+    retransmissionCount = 0;
 
     pthread_mutex_init(&tx_mutex, NULL);
     pthread_cond_init(&tx_cond, NULL);
@@ -72,11 +74,10 @@ void TxModule::setStatusInterface(StatusInterface * statusInterface) {
 
 //Private methods
 void TxModule::txRoutine() {
-    double elapsed_time = 0;
-    int milliseconds = 0;
     S3TP_PACKET * packet;
 
     pthread_mutex_lock(&tx_mutex);
+    start = std::chrono::system_clock::now();
     while(active) {
         // Checking if transceiver can currently transmit
         if (!linkInterface->getLinkStatus() || !_channelsAvailable()) {
@@ -89,27 +90,15 @@ void TxModule::txRoutine() {
         if (safeQueue.size() == MAX_TRANSMISSION_WINDOW) {
             //Maximum size of window reached, need to wait for acks
             state = BLOCKED;
-            std::chrono::time_point<std::chrono::system_clock> start, now;
-            std::chrono::duration<double> time_difference;
-            start = std::chrono::system_clock::now();
-
-            ackTimer.tv_sec = ACK_WAIT_TIME;
-            ackTimer.tv_nsec = 0;
             while (safeQueue.size() == MAX_TRANSMISSION_WINDOW) {
-                pthread_cond_timedwait(&tx_cond, &tx_mutex, &ackTimer);
-                now = std::chrono::system_clock::now();
-                time_difference = now - start;
-                elapsed_time = time_difference.count();
-                if (elapsed_time >= ACK_WAIT_TIME || retransmissionRequired) {
-                    //Timer should be ended
+                _timedWait();
+                if (elapsedTime >= ACK_WAIT_TIME) {
+                    retransmissionRequired = true;
+                    break;
+                } else if (retransmissionRequired) {
                     break;
                 }
-                //Filling ackTimer with new value
-                ackTimer.tv_sec = ACK_WAIT_TIME - (int) elapsed_time;
-                milliseconds = ((int) (elapsed_time * 1000)) % 1000;
-                ackTimer.tv_nsec = milliseconds * 1000000;
             }
-            //TODO: implement limit timeout and queue flush
             continue;
         }
 
@@ -126,6 +115,8 @@ void TxModule::txRoutine() {
             }
             state = RUNNING;
             _sendDataPacket(packet);
+            //Updating time where we sent the last packet
+            start = std::chrono::system_clock::now();
             continue;
         }
 
@@ -138,15 +129,23 @@ void TxModule::txRoutine() {
                 packet = controlQueue.front();
                 _sendControlPacket(packet);
                 controlQueue.pop();
+                //Updating time where we sent the last packet
+                start = std::chrono::system_clock::now();
             }
+            continue;
         }
+
         /* PRIORITY 3
          * Packets need to be retransmitted.
          * Once this starts, all packets will be sent out at once */
         if (retransmissionRequired) {
+            //TODO: implement retransmission limit and queue flush
             state = RUNNING;
             retransmitPackets();
+            retransmissionCount++;
             retransmissionRequired = false;
+            //Updating time where we sent the last packet
+            start = std::chrono::system_clock::now();
             continue;
         }
 
@@ -175,13 +174,44 @@ void TxModule::txRoutine() {
                 }
             }
             state = WAITING;
-            pthread_cond_wait(&tx_cond, &tx_mutex);
+            if (safeQueue.empty()) {
+                //No more acks to send. Wait indefinitely, until a packet needs to be sent out
+                pthread_cond_wait(&tx_cond, &tx_mutex);
+            } else {
+                //Still waiting for acks. Need to retransmit after a certain time.
+                _timedWait();
+                if (elapsedTime >= ACK_WAIT_TIME) {
+                    retransmissionRequired = true;
+                }
+            }
             continue;
         }
     }
     pthread_mutex_unlock(&tx_mutex);
 
     pthread_exit(NULL);
+}
+
+void TxModule::_timedWait() {
+    int milliseconds = 0;
+
+    //Update time to wait
+    now = std::chrono::system_clock::now();
+    elapsedTime = (now - start).count();
+    if (elapsedTime >= ACK_WAIT_TIME) {
+        //Timer already expired
+        return;
+    }
+    ackTimer.tv_sec = ACK_WAIT_TIME - (int) elapsedTime;
+    milliseconds = ((int) (elapsedTime * 1000)) % 1000;
+    ackTimer.tv_nsec = milliseconds * 1000000;
+
+    //Wait
+    pthread_cond_timedwait(&tx_cond, &tx_mutex, &ackTimer);
+
+    //Update elapsed time for control logic
+    now = std::chrono::system_clock::now();
+    elapsedTime = (now - start).count();
 }
 
 void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
@@ -392,10 +422,10 @@ void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
             }
         }
         retransmissionRequired = false;
+        retransmissionCount = 0;
         lastAcknowledgedSequence = ackSequence;
     } else if (ackSequence == lastAcknowledgedSequence) {
         //We received the same ack several times. Some packets got dropped by the receiver therefore.
-        //TODO: handle
         retransmissionRequired = true;
     }
 
