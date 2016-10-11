@@ -155,6 +155,14 @@ struct S3TP_PACKET{
 	uint8_t channel;  /* Logical Channel to be used on the SPI interface */
 	uint8_t options;
 
+	/**
+	 * Constructs a packet given the payload. The payload is copied and appended to
+	 * the header in a contiguous chunk of memory. By default, all header fields are unset,
+	 * as it is up to the application to set them accordingly.
+	 * @param pdu  The payload to be sent
+	 * @param pduLen  The length of the payload that will be copied inside the packet
+	 * @return The constructed S3TP packet
+	 */
 	S3TP_PACKET(const char * pdu, uint16_t pduLen) {
 		packet = new char[sizeof(S3TP_HEADER) + (pduLen * sizeof(char))];
 		memcpy(getPayload(), pdu, pduLen);
@@ -163,18 +171,22 @@ struct S3TP_PACKET{
         header->setFlags(S3TP_NO_FLAGS);
 	}
 
-    ~S3TP_PACKET() {
-        delete [] packet;
-    }
-
+	/**
+	 * Reverse Constructor. Called when receiving a well-formed packet, with a meaningful header
+	 * @param packet  The pointer to the whole packet (header + payload)
+	 * @param len  The total length of the packet
+	 * @param channel  The virtual channel on which it was received
+	 * @return The constructed S3TP packet
+	 */
 	S3TP_PACKET(const char * packet, int len, uint8_t channel) {
 		//Copying a well formed packet, where all header fields should already be consistent
 		this->packet = new char[len * sizeof(char)];
 		memcpy(this->packet, packet, (size_t)len);
 		this->channel = channel;
-        S3TP_HEADER * header = getHeader();
-        header->setPduLength((uint16_t )len);
-        header->setFlags(S3TP_NO_FLAGS);
+	}
+
+	~S3TP_PACKET() {
+		delete [] packet;
 	}
 
 	int getLength() {
