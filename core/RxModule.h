@@ -67,6 +67,7 @@ private:
     bool isPortOpen(uint8_t port);
     bool isCompleteMessageForPortAvailable(int port);
     void flushQueues();
+    bool updateInternalSequence(uint16_t sequence, bool moreFragments);
 };
 
 

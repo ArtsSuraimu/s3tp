@@ -90,14 +90,14 @@ private:
     virtual void onOutputQueueAvailable(uint8_t port);
 
     //Transport methods
-    virtual void onSetup(bool ack);
+    virtual void onSetup(bool ack, uint16_t sequenceNumber);
     virtual void onReceivedPacket(uint16_t sequenceNumber);
     virtual void onReceiveWindowFull(uint16_t lastValidSequence);
     virtual void onAcknowledgement(uint16_t sequenceAck);
     virtual void onConnectionRequest(uint8_t port, uint8_t channel, uint16_t sequenceNumber);
     virtual void onConnectionAccept(uint8_t port, uint16_t sequenceNumber);
-    virtual void onConnectionClose(uint8_t port);
-    virtual void onReset(bool ack);
+    virtual void onConnectionClose(uint8_t port, uint16_t sequenceNumber);
+    virtual void onReset(bool ack, uint16_t sequenceNumber);
 };
 
 

@@ -141,6 +141,19 @@ bool RxModule::isPortOpen(uint8_t port) {
     return result;
 }
 
+bool RxModule::updateInternalSequence(uint16_t sequence, bool moreFragments) {
+    if (sequence == expectedSequence) {
+        if (moreFragments) {
+            expectedSequence = ++sequence;
+        } else {
+            expectedSequence = (uint16_t )((sequence & 0xFF00) + (1 << 8));
+        }
+        return true;
+    } else {
+        return false;
+    }
+}
+
 int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     if (!isActive()) {
         return MODULE_INACTIVE;
@@ -159,13 +172,20 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         LOG_WARN("Unrecognized message type received. No flags were set");
         return CODE_ERROR_INVALID_TYPE;
     }
-    if (flags & S3TP_FLAG_CTRL) {
-        S3TP_CONTROL * control = (S3TP_CONTROL *)packet->getPayload();
-        return handleControlPacket(hdr, control);
-    }
     if (flags & S3TP_FLAG_ACK) {
         LOG_DEBUG("RX: ----------- Ack received -----------");
         handleAcknowledgement(hdr->ack);
+    }
+    if (flags & S3TP_FLAG_CTRL) {
+        S3TP_CONTROL * control = (S3TP_CONTROL *)packet->getPayload();
+        if (!updateInternalSequence(hdr->seq, hdr->moreFragments())) {
+            // Returning immediately. Packet sequence is wrong, hence it will be dropped right away
+            // Sending ACK for previous sequence to trigger retransmission
+            transportInterface->onReceivedPacket(expectedSequence);
+            return CODE_ERROR_INCONSISTENT_STATE;
+        }
+        // In case ACK flag is set as well, it will be handled by handleControlPacket
+        return handleControlPacket(hdr, control);
     }
     if (!(flags & S3TP_FLAG_DATA)) {
         return CODE_SUCCESS;
@@ -174,21 +194,16 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     //No need for locking
     if (inBuffer->getSizeOfQueue(hdr->getPort()) >= MAX_QUEUE_SIZE) {
         //Dropping packet right away since queue is full anyway and force sender to retransmit
+        //TODO: handle receiver buffer full (should never happen anyway)
         transportInterface->onReceivedPacket(expectedSequence);
         return CODE_SERVER_QUEUE_FULL;
     }
 
-    uint16_t sequence = hdr->seq;
-    if (hdr->seq == expectedSequence) {
-        if (hdr->moreFragments()) {
-            expectedSequence = ++sequence;
-        } else {
-            expectedSequence = (uint16_t )((sequence & 0xFF00) + (1 << 8));
-        }
+    if (updateInternalSequence(hdr->seq, hdr->moreFragments())) {
         //We got the next expected packet. Sending ACK
         transportInterface->onReceivedPacket(expectedSequence);
     } else {
-        //Dropping packet right away and sending ack for previous message
+        //Dropping packet right away and sending ACK for previous message to trigger retransmission
         transportInterface->onReceivedPacket(expectedSequence);
         return CODE_ERROR_INCONSISTENT_STATE;
     }
@@ -203,7 +218,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         int result = inBuffer->write(packet);
         if (result != CODE_SUCCESS) {
             //Something bad happened, couldn't put packet in buffer
-            LOG_ERROR(std::string("Could not put packet " + std::to_string((int)sequence) + " in buffer"));
+            LOG_ERROR(std::string("Could not put packet " + std::to_string((int)hdr->seq) + " in buffer"));
             return result;
         }
 
@@ -234,34 +249,42 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
             // Forcefully clearing everything that was in queue up until now
             // and setting the new expected sequence number
             flushQueues();
-            expectedSequence = control->syncSequence;
-            transportInterface->onSetup((bool)(flags & S3TP_FLAG_ACK));
+            pthread_mutex_lock(&rx_mutex);
+            expectedSequence = (uint16_t)(hdr->seq + 1); //Increasing directly to next expected sequence
+            pthread_mutex_unlock(&rx_mutex);
+            transportInterface->onSetup((bool)(flags & S3TP_FLAG_ACK), expectedSequence);
             // No need to set all port sequences to 0, as each current
             // port sequence will be received upon creating a connection
             break;
         case CONTROL_TYPE::SYNC:
             LOG_DEBUG("RX: ----------- Sync Packet received -----------");
             // Notify s3tp that a new connection is being established
+            pthread_mutex_lock(&rx_mutex);
             current_port_sequence[hdr->getPort()] = hdr->seq_port;
+            pthread_mutex_unlock(&rx_mutex);
             LOG_DEBUG(std::string("Sequence on port " + std::to_string(hdr->getPort())
                                   + " synchronized. New expected value: " + std::to_string(hdr->seq_port)));
             if (flags & S3TP_FLAG_ACK) {
                 //This is a connection accept message
-                transportInterface->onConnectionAccept(hdr->getPort(), hdr->seq);
+                transportInterface->onConnectionAccept(hdr->getPort(), expectedSequence);
             } else {
                 //TODO: use different channel. Should get it from client directly
-                transportInterface->onConnectionRequest(hdr->getPort(), 0, hdr->seq);
+                transportInterface->onConnectionRequest(hdr->getPort(), 0, expectedSequence);
             }
             break;
         case CONTROL_TYPE::FIN:
             LOG_DEBUG("RX: ----------- Fin Packet received -----------");
             // Notify s3tp that a connection is being closed
-            transportInterface->onConnectionClose(hdr->getPort());
+            transportInterface->onConnectionClose(hdr->getPort(), hdr->seq);
             break;
         case CONTROL_TYPE::RESET:
             LOG_DEBUG("RX: ----------- Reset Packet received -----------");
-            // Hard reset of the whole internal statatus will be handled by s3tp module
-            transportInterface->onReset((bool)(flags & S3TP_FLAG_ACK));
+            // Hard reset of the whole internal status will be handled by s3tp module
+            //TODO: refactor this part
+            transportInterface->onReset((bool)(flags & S3TP_FLAG_ACK), 1);
+            pthread_mutex_lock(&rx_mutex);
+            expectedSequence++;
+            pthread_mutex_unlock(&rx_mutex);
             break;
     }
 

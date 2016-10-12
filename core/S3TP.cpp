@@ -299,7 +299,7 @@ void S3TP::onApplicationConnected(void *params) {
     //Start setup if first time starting the protocol
     pthread_mutex_lock(&s3tp_mutex);
     if (!setupPerformed) {
-        tx.scheduleSetup(false);
+        tx.scheduleSetup(false, 0);
     }
     pthread_mutex_unlock(&s3tp_mutex);
 }
@@ -312,13 +312,13 @@ int S3TP::onApplicationMessage(void * data, size_t len, void * params) {
 void S3TP::onConnectToHost(void *params) {
     Client * cli = (Client *)params;
     //Scheduling 3-way handshake
-    tx.scheduleSync(cli->getAppPort(), cli->getVirtualChannel(), cli->getOptions());
+    tx.scheduleSync(cli->getAppPort(), cli->getVirtualChannel(), cli->getOptions(), false, 0);
 }
 
 void S3TP::onDisconnectFromHost(void *params) {
     Client * cli = (Client *)params;
     //Scheduling connection teardown
-    tx.scheduleFin(cli->getAppPort(), cli->getVirtualChannel(), cli->getOptions());
+    tx.scheduleFin(cli->getAppPort(), cli->getVirtualChannel(), cli->getOptions(), false, 0);
 }
 
 /*
@@ -376,13 +376,13 @@ void S3TP::onOutputQueueAvailable(uint8_t port) {
  *
  * @param ack  Additional ack flag set in the received setup packet
  */
-void S3TP::onSetup(bool ack) {
+void S3TP::onSetup(bool ack, uint16_t sequenceNumber) {
     pthread_mutex_lock(&s3tp_mutex);
     if (ack) {
         // In case we received an ack for sync
         if (setupInitiated) {
             // We were initiator of setup and got an ack. We still need to ack the ack (3-way last step)
-            tx.scheduleSetup(true);
+            tx.scheduleSetup(true, sequenceNumber);
             setupPerformed = true;
             setupInitiated = false;
         } else {
@@ -391,7 +391,8 @@ void S3TP::onSetup(bool ack) {
         }
     } else {
         // We weren't initiator, we need to send back an ack
-        tx.scheduleSetup(true);
+        //TODO: check
+        tx.scheduleSetup(true, sequenceNumber);
         setupPerformed = false;
     }
     pthread_mutex_unlock(&s3tp_mutex);
@@ -403,7 +404,7 @@ void S3TP::onSetup(bool ack) {
  *
  * @param ack  Additional ack flag set in the received reset packet
  */
-void S3TP::onReset(bool ack) {
+void S3TP::onReset(bool ack, uint16_t sequenceNumber) {
     pthread_mutex_lock(&s3tp_mutex);
     if (ack && resetInitiated) {
         // Reset complete. We're good to go
@@ -411,7 +412,7 @@ void S3TP::onReset(bool ack) {
     } else {
         // Received a force reset. Resetting everything, then acknowledging it
         reset();
-        tx.scheduleReset(true);
+        tx.scheduleReset(true, sequenceNumber);
     }
     pthread_mutex_unlock(&s3tp_mutex);
 }
@@ -433,9 +434,9 @@ void S3TP::onAcknowledgement(uint16_t sequenceAck) {
 //TODO: implement
 void S3TP::onConnectionRequest(uint8_t port, uint8_t channel, uint16_t sequenceNumber) {
     rx.openPort(port);
+    //TODO: get client channel
     uint8_t defaultOpts = S3TP_ARQ;
-    //TODO: send seq num as well, so we can use it as an ack in piggybacking
-    tx.scheduleSync(port, channel, defaultOpts);
+    tx.scheduleSync(port, channel, defaultOpts, true, sequenceNumber);
 }
 
 void S3TP::onConnectionAccept(uint8_t port, uint16_t sequenceNumber) {
@@ -449,7 +450,8 @@ void S3TP::onConnectionAccept(uint8_t port, uint16_t sequenceNumber) {
     pthread_mutex_unlock(&clients_mutex);
 }
 
-void S3TP::onConnectionClose(uint8_t port) {
+void S3TP::onConnectionClose(uint8_t port, uint16_t sequenceNumber) {
+    tx.scheduleAcknowledgement(sequenceNumber);
     //No 4-way close. We know the connection has been closed and that's it.
     rx.closePort(port);
     //Notify client that connection is now closed
