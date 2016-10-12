@@ -353,7 +353,7 @@ void TxModule::scheduleReset(bool ack, uint16_t ackSequence) {
 void TxModule::scheduleSetup(bool ack, uint16_t ackSequence) {
     S3TP_CONTROL control;
     control.type = CONTROL_TYPE::SETUP;
-    control.syncSequence = 0;
+    control.syncSequence = global_seq_num;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
     packet->channel = DEFAULT_RESERVED_CHANNEL;
     packet->options = S3TP_ARQ;
