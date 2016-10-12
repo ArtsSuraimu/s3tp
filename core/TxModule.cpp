@@ -237,8 +237,8 @@ void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
     }
     to_consume_port_seq[hdr->getPort()]++;
 
-    //Acks can be sent in piggybacking
-    if (scheduledAck) {
+    //Acks can be sent in piggybacking, only inside non ctrl packets
+    if (scheduledAck && !(hdr->getFlags() & S3TP_FLAG_CTRL)) {
         hdr->setAck(true);
         hdr->ack = expectedSequence;
         scheduledAck = false;
@@ -320,7 +320,7 @@ void TxModule::scheduleAcknowledgement(uint16_t ackSequence) {
  * Need to perform a hard reset of the protocol status.
  * After reset request is sent out, the worker thread waits until it receives an acknowledgement.
  */
-void TxModule::scheduleReset(bool ack) {
+void TxModule::scheduleReset(bool ack, uint16_t ackSequence) {
     S3TP_CONTROL control;
     control.type = CONTROL_TYPE::RESET;
     control.syncSequence = 0;
@@ -333,6 +333,7 @@ void TxModule::scheduleReset(bool ack) {
     hdr->setPort(0);
     hdr->setAck(ack);
     hdr->setCtrl(true);
+    hdr->ack = ackSequence;
     hdr->crc = calc_checksum((char *)&control, sizeof(S3TP_CONTROL));
 
     pthread_mutex_lock(&tx_mutex);
@@ -349,7 +350,7 @@ void TxModule::scheduleReset(bool ack) {
  *
  * @param ack  An ack flag to be set, in case we need to acknowledge a received setup packet (3-way handshake).
  */
-void TxModule::scheduleSetup(bool ack) {
+void TxModule::scheduleSetup(bool ack, uint16_t ackSequence) {
     S3TP_CONTROL control;
     control.type = CONTROL_TYPE::SETUP;
     control.syncSequence = 0;
@@ -362,6 +363,7 @@ void TxModule::scheduleSetup(bool ack) {
     hdr->setPort(0);
     hdr->setAck(ack);
     hdr->setCtrl(true);
+    hdr->ack = ackSequence;
     hdr->crc = calc_checksum((char *)&control, sizeof(S3TP_CONTROL));
 
     pthread_mutex_lock(&tx_mutex);
@@ -379,15 +381,18 @@ void TxModule::scheduleSetup(bool ack) {
  *
  * @param port  The port that was just opened
  */
-void TxModule::scheduleSync(uint8_t port, uint8_t channel, uint8_t options) {
+void TxModule::scheduleSync(uint8_t port, uint8_t channel, uint8_t options, bool ack, uint16_t ackSequence) {
     S3TP_CONTROL control;
     control.type = CONTROL_TYPE::SYNC;
     control.syncSequence = 0;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
-    packet->getHeader()->setCtrl(true);
-    packet->getHeader()->setPort(port);
     packet->channel = channel;
     packet->options = options;
+    S3TP_HEADER * hdr = packet->getHeader();
+    hdr->setAck(ack);
+    hdr->setCtrl(true);
+    hdr->ack = ackSequence;
+    hdr->setPort(port);
 
     enqueuePacket(packet, 0, false, channel, options);
     LOG_DEBUG(std::string("TX: Scheduled SYNC Packet for port " + std::to_string((int)port)));
@@ -398,15 +403,18 @@ void TxModule::scheduleSync(uint8_t port, uint8_t channel, uint8_t options) {
  * connection is being shutdown.
  * @param port  The port that was just closed
  */
-void TxModule::scheduleFin(uint8_t port, uint8_t channel, uint8_t options) {
+void TxModule::scheduleFin(uint8_t port, uint8_t channel, uint8_t options, bool ack, uint16_t ackSequence) {
     S3TP_CONTROL control;
     control.type = CONTROL_TYPE::FIN;
     control.syncSequence = 0;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
-    packet->getHeader()->setCtrl(true);
-    packet->getHeader()->setPort(port);
     packet->channel = channel;
     packet->options = options;
+    S3TP_HEADER * hdr = packet->getHeader();
+    hdr->setAck(ack);
+    hdr->setCtrl(true);
+    hdr->ack = ackSequence;
+    hdr->setPort(port);
 
     enqueuePacket(packet, 0, false, channel, options);
     LOG_DEBUG(std::string("TX: Scheduled FIN Packet for port " + std::to_string((int)port)));

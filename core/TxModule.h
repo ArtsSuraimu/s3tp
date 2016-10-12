@@ -45,10 +45,10 @@ public:
 
     //S3TP Control APIs
     void scheduleAcknowledgement(uint16_t ackSequence);
-    void scheduleReset(bool ack);
-    void scheduleSetup(bool ack);
-    void scheduleSync(uint8_t port, uint8_t channel, uint8_t options);
-    void scheduleFin(uint8_t port, uint8_t channel, uint8_t options);
+    void scheduleReset(bool ack, uint16_t ackSequence);
+    void scheduleSetup(bool ack, uint16_t ackSequence);
+    void scheduleSync(uint8_t port, uint8_t channel, uint8_t options, bool ack, uint16_t ackSequence);
+    void scheduleFin(uint8_t port, uint8_t channel, uint8_t options, bool ack, uint16_t ackSequence);
     void notifyAcknowledgement(uint16_t ackSequence);
 
     //Public channel and link methods
