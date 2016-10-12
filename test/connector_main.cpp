@@ -53,10 +53,9 @@ void communicationRoutine(S3tpConnector& connector) {
 }
 
 int main(int argc, char* argv[]) {
-    //args: socket_path L/C
     if (argc != 3)
     {
-        std::cout << "Illegal arguments\n";
+        std::cout << "Invalid arguments. Usage: ./s3tp_conn unix_path mode(L/C)\n";
         return -1;
     }
 
