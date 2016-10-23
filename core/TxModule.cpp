@@ -112,6 +112,20 @@ void TxModule::txRoutine() {
         }
 
         /* PRIORITY 1
+         * Packets need to be retransmitted.
+         * Once this starts, all packets will be sent out at once */
+        if (retransmissionRequired) {
+            //TODO: implement retransmission limit and queue flush
+            state = RUNNING;
+            retransmitPackets();
+            retransmissionCount++;
+            retransmissionRequired = false;
+            //Updating time where we sent the last packet
+            start = std::chrono::system_clock::now();
+            continue;
+        }
+
+        /* PRIORITY 2
          * Fragmented messages in queue have priority over other messages,
          * as their shared global sequence must not be overridden (messages cannot be split up) */
         if (sendingFragments) {
@@ -129,7 +143,7 @@ void TxModule::txRoutine() {
             continue;
         }
 
-        /* PRIORITY 2
+        /* PRIORITY 3
          * Control messages are sent before normal messages. */
         if (!controlQueue.empty() && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
             if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
@@ -141,20 +155,6 @@ void TxModule::txRoutine() {
                 //Updating time where we sent the last packet
                 start = std::chrono::system_clock::now();
             }
-            continue;
-        }
-
-        /* PRIORITY 3
-         * Packets need to be retransmitted.
-         * Once this starts, all packets will be sent out at once */
-        if (retransmissionRequired) {
-            //TODO: implement retransmission limit and queue flush
-            state = RUNNING;
-            retransmitPackets();
-            retransmissionCount++;
-            retransmissionRequired = false;
-            //Updating time where we sent the last packet
-            start = std::chrono::system_clock::now();
             continue;
         }
 
