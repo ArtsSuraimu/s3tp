@@ -9,6 +9,7 @@ S3TP::S3TP() {
     pthread_mutex_init(&s3tp_mutex, NULL);
     pthread_mutex_lock(&s3tp_mutex);
     reset();
+    resetting = false;
     pthread_mutex_unlock(&s3tp_mutex);
 }
 
@@ -38,6 +39,8 @@ void S3TP::reset() {
     rx.reset();
     tx.reset();
     setupPerformed = false;
+    setupInitiated = false;
+    resetting = true;
 }
 
 int S3TP::init(TRANSCEIVER_CONFIG * config) {
@@ -406,12 +409,12 @@ void S3TP::onSetup(bool ack, uint16_t sequenceNumber) {
  */
 void S3TP::onReset(bool ack, uint16_t sequenceNumber) {
     pthread_mutex_lock(&s3tp_mutex);
-    if (ack && resetInitiated) {
+    if (ack && resetting) {
         // Reset complete. We're good to go
-        resetInitiated = false;
+        resetting = false;
     } else {
-        // Received a force reset. Resetting everything, then acknowledging it
-        reset();
+        // Received a force reset. Resetting everything (not rx, that was already resetted), then acknowledging it
+        tx.reset();
         tx.scheduleReset(true, sequenceNumber);
     }
     pthread_mutex_unlock(&s3tp_mutex);

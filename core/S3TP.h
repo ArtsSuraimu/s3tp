@@ -81,7 +81,7 @@ private:
 
     //Protocol internal status
     bool setupPerformed, setupInitiated;
-    bool resetInitiated;
+    bool resetting;
 
     //Status check
     virtual void onLinkStatusChanged(bool active);
