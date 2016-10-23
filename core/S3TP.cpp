@@ -435,11 +435,16 @@ void S3TP::onAcknowledgement(uint16_t sequenceAck) {
 }
 
 //TODO: implement
-void S3TP::onConnectionRequest(uint8_t port, uint8_t channel, uint16_t sequenceNumber) {
+void S3TP::onConnectionRequest(uint8_t port, uint16_t sequenceNumber) {
     rx.openPort(port);
-    //TODO: get client channel
+    Client * cli = clients[port];
+    if (cli == nullptr) {
+        //No application listening on the given port. Respond with a NACK
+        //TODO: respond with nack
+        return;
+    }
     uint8_t defaultOpts = S3TP_ARQ;
-    tx.scheduleSync(port, channel, defaultOpts, true, sequenceNumber);
+    tx.scheduleSync(port, cli->getVirtualChannel(), defaultOpts, true, sequenceNumber);
 }
 
 void S3TP::onConnectionAccept(uint8_t port, uint16_t sequenceNumber) {

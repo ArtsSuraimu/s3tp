@@ -194,7 +194,6 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     //No need for locking
     if (inBuffer->getSizeOfQueue(hdr->getPort()) >= MAX_QUEUE_SIZE) {
         //Dropping packet right away since queue is full anyway and force sender to retransmit
-        //TODO: handle receiver buffer full (should never happen anyway)
         transportInterface->onReceivedPacket(expectedSequence);
         return CODE_SERVER_QUEUE_FULL;
     }
@@ -271,8 +270,7 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
                 //This is a connection accept message
                 transportInterface->onConnectionAccept(hdr->getPort(), sequenceToAck);
             } else {
-                //TODO: use different channel. Should get it from client directly
-                transportInterface->onConnectionRequest(hdr->getPort(), 0, sequenceToAck);
+                transportInterface->onConnectionRequest(hdr->getPort(), sequenceToAck);
             }
             break;
         case CONTROL_TYPE::FIN:
