@@ -172,10 +172,6 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         LOG_WARN("Unrecognized message type received. No flags were set");
         return CODE_ERROR_INVALID_TYPE;
     }
-    if (flags & S3TP_FLAG_ACK) {
-        LOG_DEBUG("RX: ----------- Ack received -----------");
-        handleAcknowledgement(hdr->ack);
-    }
     if (flags & S3TP_FLAG_CTRL) {
         S3TP_CONTROL * control = (S3TP_CONTROL *)packet->getPayload();
         if (!updateInternalSequence(hdr->seq, hdr->moreFragments())) {
@@ -186,6 +182,10 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         }
         // In case ACK flag is set as well, it will be handled by handleControlPacket
         return handleControlPacket(hdr, control);
+    }
+    if (flags & S3TP_FLAG_ACK) {
+        LOG_DEBUG("RX: ----------- Ack received -----------");
+        handleAcknowledgement(hdr->ack);
     }
     if (!(flags & S3TP_FLAG_DATA)) {
         return CODE_SUCCESS;
