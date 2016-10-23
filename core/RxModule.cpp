@@ -241,6 +241,7 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
 }
 
 int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
+    uint16_t sequenceToAck;
     uint8_t flags = hdr->getFlags();
     //Handling control message
     switch (control->type) {
@@ -251,8 +252,9 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
             flushQueues();
             pthread_mutex_lock(&rx_mutex);
             expectedSequence = (uint16_t)(hdr->seq + 1); //Increasing directly to next expected sequence
+            sequenceToAck = expectedSequence;
             pthread_mutex_unlock(&rx_mutex);
-            transportInterface->onSetup((bool)(flags & S3TP_FLAG_ACK), expectedSequence);
+            transportInterface->onSetup((bool)(flags & S3TP_FLAG_ACK), sequenceToAck);
             // No need to set all port sequences to 0, as each current
             // port sequence will be received upon creating a connection
             break;
@@ -261,15 +263,16 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
             // Notify s3tp that a new connection is being established
             pthread_mutex_lock(&rx_mutex);
             current_port_sequence[hdr->getPort()] = hdr->seq_port;
+            sequenceToAck = expectedSequence;
             pthread_mutex_unlock(&rx_mutex);
             LOG_DEBUG(std::string("Sequence on port " + std::to_string(hdr->getPort())
                                   + " synchronized. New expected value: " + std::to_string(hdr->seq_port)));
             if (flags & S3TP_FLAG_ACK) {
                 //This is a connection accept message
-                transportInterface->onConnectionAccept(hdr->getPort(), expectedSequence);
+                transportInterface->onConnectionAccept(hdr->getPort(), sequenceToAck);
             } else {
                 //TODO: use different channel. Should get it from client directly
-                transportInterface->onConnectionRequest(hdr->getPort(), 0, expectedSequence);
+                transportInterface->onConnectionRequest(hdr->getPort(), 0, sequenceToAck);
             }
             break;
         case CONTROL_TYPE::FIN:
@@ -280,11 +283,12 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
         case CONTROL_TYPE::RESET:
             LOG_DEBUG("RX: ----------- Reset Packet received -----------");
             // Hard reset of the whole internal status will be handled by s3tp module
-            //TODO: refactor this part
-            transportInterface->onReset((bool)(flags & S3TP_FLAG_ACK), 1);
+            reset();
             pthread_mutex_lock(&rx_mutex);
-            expectedSequence++;
+            updateInternalSequence(hdr->seq, false);
+            sequenceToAck = expectedSequence;
             pthread_mutex_unlock(&rx_mutex);
+            transportInterface->onReset((bool)(flags & S3TP_FLAG_ACK), sequenceToAck);
             break;
     }
 
