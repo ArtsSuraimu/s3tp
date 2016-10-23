@@ -12,16 +12,16 @@
 #include "Constants.h"
 
 //S3TP Header Flags
-#define S3TP_NO_FLAGS 0x00
-#define S3TP_FLAG_DATA 0x01
+#define S3TP_FLAG_DATA 0x00
+#define S3TP_FLAG_CTRL 0x01
 #define S3TP_FLAG_ACK 0x02
-#define S3TP_FLAG_CTRL 0x04
+#define S3TP_FLAG_MORE_FRAGMENTS 0x04
 
 enum CONTROL_TYPE : uint8_t {
-    SETUP = 0x00,
-    SYNC = 0x01,
-    FIN = 0x02,
-    RESET = 0x03
+    SETUP = 0x01,
+    SYNC = 0x02,
+    FIN = 0x04,
+    RESET = 0x08
 };
 
 //Eigth channel should be reserved for now
@@ -48,31 +48,32 @@ typedef int SOCKET;
 typedef struct tag_s3tp_header
 {
 	uint16_t crc;
-	uint16_t seq;		/* Global Sequence Number */
-				/* First Byte: Seq_head, 
-				 * 2nd Byte: Seq_sub 
-				 used for packet fragmentation 
-				*/
-	uint16_t ack;
+	/* Global Sequence Number
+	 * First Byte: Seq_head,
+     * 2nd Byte: Seq_sub used for packet fragmentation
+    */
+	uint16_t seq;
+
 	/*
 	 * Contains the length of the payload of this current packet.
 	 * The last 2 bits are reserved for the protocol.
 	 */
 	uint16_t pdu_length;
+	uint8_t port;
 	uint8_t seq_port;		/* used for reordering */
-    uint8_t port;
+	uint16_t ack;
 
 	//Fragmentation bit functions (bit is the most significant bit of the port variable)
 	uint8_t moreFragments() {
-		return (uint8_t)((port >> 7) & 1);
+		return (uint8_t)((pdu_length >> 15) & 1);
 	}
 
 	void setMoreFragments() {
-		port |= 1 << 7;
+		pdu_length |= (1 << 15);
 	}
 
 	void unsetMoreFragments() {
-		port &= ~(1 << 7);
+		pdu_length &= ~(1 << 15);
 	}
 
 	//Getters and setters
@@ -119,9 +120,9 @@ typedef struct tag_s3tp_header
 
 	void setData(bool data) {
 		if (data) {
-			pdu_length |= (1 << 13);
+			pdu_length |= (0 << 13);
 		} else {
-			pdu_length &= ~(1 << 13);
+			pdu_length &= ~(0 << 13);
 		}
 	}
 
@@ -135,9 +136,9 @@ typedef struct tag_s3tp_header
 
 	void setCtrl(bool control) {
 		if (control) {
-			pdu_length |= (1 << 15);
+			pdu_length |= (1 << 13);
 		} else {
-			pdu_length &= ~(1 << 15);
+			pdu_length &= ~(1 << 13);
 		}
 	}
 
@@ -168,7 +169,7 @@ struct S3TP_PACKET{
 		memcpy(getPayload(), pdu, pduLen);
 		S3TP_HEADER * header = getHeader();
 		header->setPduLength(pduLen);
-        header->setFlags(S3TP_NO_FLAGS);
+        header->setFlags(S3TP_FLAG_DATA);
 	}
 
 	/**
@@ -204,7 +205,6 @@ struct S3TP_PACKET{
 
 struct S3TP_CONTROL {
     CONTROL_TYPE type;
-    uint16_t syncSequence;
 };
 
 #pragma pack(pop)

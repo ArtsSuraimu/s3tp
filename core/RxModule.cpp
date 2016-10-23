@@ -168,10 +168,6 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     }
 
     uint8_t flags = hdr->getFlags();
-    if (flags == S3TP_NO_FLAGS) {
-        LOG_WARN("Unrecognized message type received. No flags were set");
-        return CODE_ERROR_INVALID_TYPE;
-    }
     if (flags & S3TP_FLAG_CTRL) {
         S3TP_CONTROL * control = (S3TP_CONTROL *)packet->getPayload();
         if (!updateInternalSequence(hdr->seq, hdr->moreFragments())) {
