@@ -323,7 +323,6 @@ void TxModule::scheduleAcknowledgement(uint16_t ackSequence) {
 void TxModule::scheduleReset(bool ack, uint16_t ackSequence) {
     S3TP_CONTROL control;
     control.type = CONTROL_TYPE::RESET;
-    control.syncSequence = 0;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
     packet->channel = DEFAULT_RESERVED_CHANNEL;
     packet->options = S3TP_ARQ;
@@ -353,7 +352,6 @@ void TxModule::scheduleReset(bool ack, uint16_t ackSequence) {
 void TxModule::scheduleSetup(bool ack, uint16_t ackSequence) {
     S3TP_CONTROL control;
     control.type = CONTROL_TYPE::SETUP;
-    control.syncSequence = global_seq_num;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
     packet->channel = DEFAULT_RESERVED_CHANNEL;
     packet->options = S3TP_ARQ;
@@ -384,7 +382,6 @@ void TxModule::scheduleSetup(bool ack, uint16_t ackSequence) {
 void TxModule::scheduleSync(uint8_t port, uint8_t channel, uint8_t options, bool ack, uint16_t ackSequence) {
     S3TP_CONTROL control;
     control.type = CONTROL_TYPE::SYNC;
-    control.syncSequence = 0;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
     packet->channel = channel;
     packet->options = options;
@@ -406,7 +403,6 @@ void TxModule::scheduleSync(uint8_t port, uint8_t channel, uint8_t options, bool
 void TxModule::scheduleFin(uint8_t port, uint8_t channel, uint8_t options, bool ack, uint16_t ackSequence) {
     S3TP_CONTROL control;
     control.type = CONTROL_TYPE::FIN;
-    control.syncSequence = 0;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
     packet->channel = channel;
     packet->options = options;
