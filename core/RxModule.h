@@ -48,7 +48,7 @@ private:
     Buffer * inBuffer;
     uint8_t to_consume_global_seq;
     uint16_t expectedSequence;
-    pthread_mutex_t rx_mutex;
+    std::mutex rxMutex;
     std::condition_variable availableMsgCond;
 
     StatusInterface * statusInterface;

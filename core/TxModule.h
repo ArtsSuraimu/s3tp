@@ -22,7 +22,7 @@
 
 #define DEFAULT_RESERVED_CHANNEL 0
 
-#define ACK_WAIT_TIME 5
+#define ACK_WAIT_TIME 10000 //Milliseconds
 #define MAX_RETRANSMISSION_COUNT 2
 
 class TxModule : public PolicyActor<S3TP_PACKET *> {
@@ -59,9 +59,9 @@ public:
 private:
     STATE state;
     bool active;
-    pthread_t tx_thread;
-    pthread_mutex_t tx_mutex;
-    pthread_cond_t tx_cond;
+    std::thread txThread;
+    std::mutex txMutex;
+    std::condition_variable txCond;
     std::set<uint8_t> channel_blacklist;
     bool sendingFragments;
     uint8_t currentPort;
@@ -95,7 +95,6 @@ private:
     int retransmissionCount;
 
     void txRoutine();
-    static void * staticTxRoutine(void * args);
     void sendAcknowledgement();
     void retransmitPackets();
     void _sendDataPacket(S3TP_PACKET *pkt);

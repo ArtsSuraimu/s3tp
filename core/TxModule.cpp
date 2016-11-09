@@ -30,24 +30,21 @@ TxModule::TxModule() {
     elapsedTime = 0;
     retransmissionCount = 0;
 
-    pthread_mutex_init(&tx_mutex, NULL);
-    pthread_cond_init(&tx_cond, NULL);
     outBuffer = new Buffer(this);
     LOG_DEBUG("Created Tx Module");
 }
 
 //Dtor
 TxModule::~TxModule() {
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
     state = WAITING;
     delete outBuffer;
-    pthread_mutex_unlock(&tx_mutex);
-    pthread_mutex_destroy(&tx_mutex);
+    txMutex.unlock();
     LOG_DEBUG("Destroyed Tx Module");
 }
 
 void TxModule::reset() {
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
     state = WAITING;
     global_seq_num = 0;
     sendingFragments = false;
@@ -59,7 +56,7 @@ void TxModule::reset() {
     port_sequence.clear();
     to_consume_port_seq.clear();
     outBuffer->clear();
-    pthread_mutex_unlock(&tx_mutex);
+    txMutex.unlock();
 }
 
 void TxModule::sendAcknowledgement() {
@@ -75,22 +72,22 @@ void TxModule::sendAcknowledgement() {
 }
 
 void TxModule::setStatusInterface(StatusInterface * statusInterface) {
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
     this->statusInterface = statusInterface;
-    pthread_mutex_unlock(&tx_mutex);
+    txMutex.unlock();
 }
 
 //Private methods
 void TxModule::txRoutine() {
     S3TP_PACKET * packet;
 
-    pthread_mutex_lock(&tx_mutex);
+    std::unique_lock<std::mutex> lock(txMutex);
     start = std::chrono::system_clock::now();
     while(active) {
         // Checking if transceiver can currently transmit
         if (!linkInterface->getLinkStatus() || !_channelsAvailable()) {
             state = BLOCKED;
-            pthread_cond_wait(&tx_cond, &tx_mutex);
+            txCond.wait(lock);
             continue;
         }
 
@@ -133,7 +130,7 @@ void TxModule::txRoutine() {
             if (packet == NULL) {
                 //Channels are currently blocked and packets cannot be sent
                 state = BLOCKED;
-                pthread_cond_wait(&tx_cond, &tx_mutex);
+                txCond.wait(lock);
                 continue;
             }
             state = RUNNING;
@@ -166,7 +163,7 @@ void TxModule::txRoutine() {
             if (packet == NULL) {
                 //Channels are currently blocked and packets cannot be sent
                 state = BLOCKED;
-                pthread_cond_wait(&tx_cond, &tx_mutex);
+                txCond.wait(lock);
                 continue;
             }
             state = RUNNING;
@@ -185,7 +182,7 @@ void TxModule::txRoutine() {
             state = WAITING;
             if (safeQueue.empty()) {
                 //No more acks to send. Wait indefinitely, until a packet needs to be sent out
-                pthread_cond_wait(&tx_cond, &tx_mutex);
+                txCond.wait(lock);
             } else {
                 //Still waiting for acks. Need to retransmit after a certain time.
                 _timedWait();
@@ -196,28 +193,24 @@ void TxModule::txRoutine() {
             continue;
         }
     }
-    pthread_mutex_unlock(&tx_mutex);
-
-    pthread_exit(NULL);
+    //Thread will die on its own
 }
 
 void TxModule::_timedWait() {
-    int milliseconds = 0;
-
     //Update time to wait
     now = std::chrono::system_clock::now();
-    auto difference = std::chrono::duration_cast<std::chrono::seconds>(now - start);
+    auto difference = std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
     elapsedTime = difference.count();
     if (elapsedTime >= ACK_WAIT_TIME) {
         //Timer already expired
         return;
     }
-    ackTimer.tv_sec = ACK_WAIT_TIME - (int) elapsedTime;
-    milliseconds = ((int) (elapsedTime * 1000)) % 1000;
-    ackTimer.tv_nsec = milliseconds * 1000000;
+    int remainingTime = ACK_WAIT_TIME - (int)elapsedTime;
+    std::chrono::milliseconds ms(remainingTime);
 
     //Wait
-    pthread_cond_timedwait(&tx_cond, &tx_mutex, &ackTimer);
+    std::unique_lock<std::mutex> lock(txMutex);
+    txCond.wait_for(lock, ms);
 
     //Update elapsed time for control logic
     now = std::chrono::system_clock::now();
@@ -247,7 +240,7 @@ void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
     //Saving packet inside history queue
     safeQueue.push_back(pkt);
 
-    pthread_mutex_unlock(&tx_mutex);
+    txMutex.unlock();
 
     LOG_DEBUG(std::string("TX: Data Packet sent from port " + std::to_string((int)hdr->getPort())
                           + " to Link Layer -> glob_seq: " + std::to_string((int)hdr->getGlobalSequence())
@@ -258,11 +251,11 @@ void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
 
     if (linkInterface->sendFrame(arq, pkt->channel, pkt->packet, pkt->getLength()) < 0) {
         //Blacklisting channel
-        pthread_mutex_lock(&tx_mutex);
+        txMutex.lock();
         _setChannelAvailable(pkt->channel, false);
         //TODO: make this better somehow
         retransmissionRequired = true;
-        pthread_mutex_unlock(&tx_mutex);
+        txMutex.unlock();
     }
 
     //Since a packet was just popped from the buffer, the queue is definitely available
@@ -271,7 +264,7 @@ void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
         statusInterface->onOutputQueueAvailable(hdr->getPort());
     }
 
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
 }
 
 void TxModule::_sendControlPacket(S3TP_PACKET *pkt) {
@@ -279,7 +272,7 @@ void TxModule::_sendControlPacket(S3TP_PACKET *pkt) {
     hdr->setGlobalSequence(global_seq_num++);
 
     safeQueue.push_back(pkt);
-    pthread_mutex_unlock(&tx_mutex);
+    txMutex.unlock();
 
     LOG_DEBUG(std::string("TX: Control Packet sent to Link Layer -> glob_seq: "
                           + std::to_string((int)hdr->getGlobalSequence())
@@ -289,12 +282,12 @@ void TxModule::_sendControlPacket(S3TP_PACKET *pkt) {
 
     if (linkInterface->sendFrame(arq, pkt->channel, pkt->packet, pkt->getLength()) < 0) {
         //Blacklisting channel
-        pthread_mutex_lock(&tx_mutex);
+        txMutex.lock();
         _setChannelAvailable(pkt->channel, false);
         //TODO: make this better somehow
         retransmissionRequired = true;
     } else {
-        pthread_mutex_lock(&tx_mutex);
+        txMutex.lock();
     }
 }
 
@@ -307,13 +300,13 @@ void TxModule::_sendControlPacket(S3TP_PACKET *pkt) {
  * @param control  Flag indicating whether the ack is for a control message or not
  */
 void TxModule::scheduleAcknowledgement(uint16_t ackSequence) {
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
     //TODO: handle control ack?!
     scheduledAck = true;
     expectedSequence = ackSequence;
     //Notifying routine thread that a new ack message needs to be sent out
-    pthread_cond_signal(&tx_cond);
-    pthread_mutex_unlock(&tx_mutex);
+    txCond.notify_all();
+    txMutex.unlock();
 }
 
 /**
@@ -335,9 +328,9 @@ void TxModule::scheduleReset(bool ack, uint16_t ackSequence) {
     hdr->ack = ackSequence;
     hdr->crc = calc_checksum((char *)&control, sizeof(S3TP_CONTROL));
 
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
     controlQueue.push(packet);
-    pthread_mutex_unlock(&tx_mutex);
+    txMutex.unlock();
     LOG_DEBUG("TX: Scheduled RESET Packet");
 }
 
@@ -364,10 +357,10 @@ void TxModule::scheduleSetup(bool ack, uint16_t ackSequence) {
     hdr->ack = ackSequence;
     hdr->crc = calc_checksum((char *)&control, sizeof(S3TP_CONTROL));
 
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
     controlQueue.push(packet);
-    pthread_cond_signal(&tx_cond);
-    pthread_mutex_unlock(&tx_mutex);
+    txCond.notify_all();
+    txMutex.unlock();
     LOG_DEBUG("TX: Scheduled SETUP Packet");
 }
 
@@ -426,11 +419,11 @@ void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
     S3TP_PACKET * pkt;
     uint16_t ackRelativeSeq = 0, currentSeq = 0;
 
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
 
     if (safeQueue.empty()) {
         //Received a spurious (probably an older ACK coming in. Ignore it). Out queue is empty anyway.
-        pthread_mutex_unlock(&tx_mutex);
+        txMutex.unlock();
         return;
     }
 
@@ -455,8 +448,8 @@ void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
         retransmissionRequired = true;
     }
 
-    pthread_cond_signal(&tx_cond);
-    pthread_mutex_unlock(&tx_mutex);
+    txCond.notify_all();
+    txMutex.unlock();
 }
 
 /*
@@ -477,7 +470,7 @@ void TxModule::retransmitPackets() {
             continue;
         }
 
-        pthread_mutex_unlock(&tx_mutex);
+        txMutex.unlock();
 
         LOG_DEBUG(std::string("TX: Packet sent from port " + std::to_string((int)hdr->getPort())
                               + " to Link Layer -> glob_seq: " + std::to_string((int)hdr->getGlobalSequence())
@@ -487,7 +480,8 @@ void TxModule::retransmitPackets() {
         bool arq = pkt->options & S3TP_ARQ;
 
         while (linkInterface->getBufferFull(pkt->channel)) {
-            pthread_cond_wait(&tx_cond, &tx_mutex);
+            std::unique_lock<std::mutex> lock(txMutex);
+            txCond.wait(lock);
             if (linkInterface->sendFrame(arq, pkt->channel, pkt->packet, pkt->getLength()) < 0) {
                 //Send frame failed. Either underlying buffer is full or channel is broken
                 //TODO: implement safety mechanism
@@ -497,35 +491,32 @@ void TxModule::retransmitPackets() {
     }
 }
 
-void * TxModule::staticTxRoutine(void * args) {
-    static_cast<TxModule*>(args)->txRoutine();
-    return NULL;
-}
-
 //Public methods
 void TxModule::startRoutine(Transceiver::LinkInterface * spi_if) {
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
     linkInterface = spi_if;
     active = true;
-    int txId = pthread_create(&tx_thread, NULL, &TxModule::staticTxRoutine, this);
-    pthread_mutex_unlock(&tx_mutex);
+    txThread = std::thread(&TxModule::txRoutine, this);
+    txMutex.unlock();
 
-    LOG_DEBUG(std::string("TX Thread (id " + std::to_string(txId) + "): START"));
+    LOG_DEBUG(std::string("TX Thread: START"));
 }
 
 void TxModule::stopRoutine() {
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
     active = false;
-    pthread_cond_signal(&tx_cond);
-    pthread_mutex_unlock(&tx_mutex);
-    pthread_join(tx_thread, NULL);
+    txCond.notify_all();
+    txMutex.unlock();
+    if (txThread.joinable()) {
+        txThread.join();
+    }
     LOG_DEBUG("TX Thread: STOP");
 }
 
 TxModule::STATE TxModule::getCurrentState() {
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
     STATE current = state;
-    pthread_mutex_unlock(&tx_mutex);
+    txMutex.unlock();
     return current;
 }
 
@@ -534,23 +525,23 @@ bool TxModule::isQueueAvailable(uint8_t port, uint8_t no_packets) {
 }
 
 void TxModule::setChannelAvailable(uint8_t channel, bool available) {
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
     if (available) {
         channel_blacklist.erase(channel);
         LOG_DEBUG(std::string("Whitelisted channel " + std::to_string((int)channel)));
-        pthread_cond_signal(&tx_cond);
+        txCond.notify_all();
     } else {
         channel_blacklist.insert(channel);
         LOG_DEBUG(std::string("Blacklisted channel " + std::to_string((int)channel)));
     }
-    pthread_mutex_unlock(&tx_mutex);
+    txMutex.unlock();
 }
 
 bool TxModule::isChannelAvailable(uint8_t channel) {
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
     //result = channel is not in blacklist
     bool result = channel_blacklist.find(channel) == channel_blacklist.end();
-    pthread_mutex_unlock(&tx_mutex);
+    txMutex.unlock();
     return result;
 }
 
@@ -565,7 +556,7 @@ void TxModule::_setChannelAvailable(uint8_t channel, bool available) {
     if (available) {
         channel_blacklist.erase(channel);
         LOG_DEBUG(std::string("Whitelisted channel " + std::to_string((int)channel)));
-        pthread_cond_signal(&tx_cond);
+        txCond.notify_all();
     } else {
         channel_blacklist.insert(channel);
         LOG_DEBUG(std::string("Blacklisted channel " + std::to_string((int)channel)));
@@ -578,7 +569,7 @@ bool TxModule::_isChannelAvailable(uint8_t channel) {
 
 void TxModule::notifyLinkAvailability(bool available) {
     if (available) {
-        pthread_cond_signal(&tx_cond);
+        txCond.notify_all();
     }
 }
 
@@ -596,10 +587,10 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
                             bool more_fragments,
                             uint8_t spi_channel,
                             uint8_t options) {
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
     if (!active) {
         //If is not active, do not attempt to enqueue something
-        pthread_mutex_unlock(&tx_mutex);
+        txMutex.unlock();
         return CODE_INACTIVE_ERROR;
     }
     S3TP_HEADER * hdr = packet->getHeader();
@@ -614,13 +605,13 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
     //Increasing port sequence
     int port = hdr->getPort();
     hdr->seq_port = port_sequence[port]++;
-    pthread_mutex_unlock(&tx_mutex);
+    txMutex.unlock();
 
     uint16_t crc = calc_checksum(packet->getPayload(), hdr->getPduLength());
     hdr->crc = crc;
 
     outBuffer->write(packet);
-    pthread_cond_signal(&tx_cond);
+    txCond.notify_all();
 
     return CODE_SUCCESS;
 }
@@ -628,7 +619,7 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
 int TxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     int comp = 0;
     uint8_t seq1, seq2, offset;
-    pthread_mutex_lock(&tx_mutex);
+    txMutex.lock();
 
     offset = to_consume_port_seq[element1->getHeader()->getPort()];
     seq1 = element1->getHeader()->seq_port - offset;
@@ -638,7 +629,7 @@ int TxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     } else if (seq1 > seq2) {
         comp = 1; //Element 2 is lower, hence has higher priority
     }
-    pthread_mutex_unlock(&tx_mutex);
+    txMutex.unlock();
     return comp;
 }
 

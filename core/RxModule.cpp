@@ -7,8 +7,6 @@
 RxModule::RxModule() {
     to_consume_global_seq = 0;
     expectedSequence = 0;
-    pthread_mutex_init(&rx_mutex, NULL);
-    pthread_cond_init(&available_msg_cond, NULL);
     inBuffer = new Buffer(this);
     statusInterface = nullptr;
     transportInterface = nullptr;
@@ -16,57 +14,55 @@ RxModule::RxModule() {
 
 RxModule::~RxModule() {
     stopModule();
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     delete inBuffer;
-    pthread_cond_destroy(&available_msg_cond);
 
-    pthread_mutex_unlock(&rx_mutex);
-    pthread_mutex_destroy(&rx_mutex);
+    rxMutex.unlock();
     //TODO: implement. Also remember to close all ports
 }
 
 void RxModule::reset() {
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     expectedSequence = 0;
     to_consume_global_seq = 0;
     inBuffer->clear();
     current_port_sequence.clear();
     available_messages.clear();
     open_ports.clear();
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
 }
 
 void RxModule::setStatusInterface(StatusInterface * statusInterface) {
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     this->statusInterface = statusInterface;
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
 }
 
 void RxModule::setTransportInterface(TransportInterface * transportInterface) {
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     this->transportInterface = transportInterface;
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
 }
 
 void RxModule::startModule() {
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     active = true;
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
 }
 
 void RxModule::stopModule() {
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     active = false;
     //Signaling any thread that is currently waiting for an incoming message.
     // Such thread should then check the status of the module, in order to avoid waiting forever.
-    pthread_cond_signal(&available_msg_cond);
-    pthread_mutex_unlock(&rx_mutex);
+    availableMsgCond.notify_all();
+    rxMutex.unlock();
 }
 
 bool RxModule::isActive() {
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     bool result = active;
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
     return result;
 }
 
@@ -84,60 +80,60 @@ void RxModule::handleFrame(bool arq, int channel, const void* data, int length) 
 }
 
 void RxModule::handleLinkStatus(bool linkStatus) {
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     LOG_DEBUG("Link status changed");
     if (statusInterface != NULL) {
         statusInterface->onLinkStatusChanged(linkStatus);
     }
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
 }
 
 void RxModule::handleBufferEmpty(int channel) {
     //The channel queue is not full anymore, so we can start writing on it again
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     if (statusInterface != NULL) {
         statusInterface->onChannelStatusChanged((uint8_t)channel, true);
     }
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
 }
 
 int RxModule::openPort(uint8_t port) {
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     if (!active) {
-        pthread_mutex_unlock(&rx_mutex);
+        rxMutex.unlock();
         return MODULE_INACTIVE;
     }
     if (open_ports.find(port) != open_ports.end()) {
         //Port is already open
-        pthread_mutex_unlock(&rx_mutex);
+        rxMutex.unlock();
         return PORT_ALREADY_OPEN;
     }
     open_ports[port] = 1;
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
 
     return CODE_SUCCESS;
 }
 
 int RxModule::closePort(uint8_t port) {
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     if (!active) {
-        pthread_mutex_unlock(&rx_mutex);
+        rxMutex.unlock();
         return MODULE_INACTIVE;
     }
     if (open_ports.find(port) != open_ports.end()) {
         open_ports.erase(port);
-        pthread_mutex_unlock(&rx_mutex);
+        rxMutex.unlock();
         return CODE_SUCCESS;
     }
 
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
     return PORT_ALREADY_CLOSED;
 }
 
 bool RxModule::isPortOpen(uint8_t port) {
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     bool result = (open_ports.find(port) != open_ports.end() && active);
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
     return result;
 }
 
@@ -224,13 +220,13 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
                               + ", port_seq " + std::to_string((int)hdr->seq_port)));
     }
 
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     if (isCompleteMessageForPortAvailable(hdr->getPort())) {
         //New message is available, notify
         available_messages[hdr->getPort()] = 1;
-        pthread_cond_signal(&available_msg_cond);
+        availableMsgCond.notify_all();
     }
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
 
     return CODE_SUCCESS;
 }
@@ -245,10 +241,10 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
             // Forcefully clearing everything that was in queue up until now
             // and setting the new expected sequence number
             flushQueues();
-            pthread_mutex_lock(&rx_mutex);
+            rxMutex.lock();
             expectedSequence = (uint16_t)(hdr->seq + 1); //Increasing directly to next expected sequence
             sequenceToAck = expectedSequence;
-            pthread_mutex_unlock(&rx_mutex);
+            rxMutex.unlock();
             transportInterface->onSetup((bool)(flags & S3TP_FLAG_ACK), sequenceToAck);
             // No need to set all port sequences to 0, as each current
             // port sequence will be received upon creating a connection
@@ -256,10 +252,10 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
         case CONTROL_TYPE::SYNC:
             LOG_DEBUG("RX: ----------- Sync Packet received -----------");
             // Notify s3tp that a new connection is being established
-            pthread_mutex_lock(&rx_mutex);
+            rxMutex.lock();
             current_port_sequence[hdr->getPort()] = hdr->seq_port;
             sequenceToAck = expectedSequence;
-            pthread_mutex_unlock(&rx_mutex);
+            rxMutex.unlock();
             LOG_DEBUG(std::string("Sequence on port " + std::to_string(hdr->getPort())
                                   + " synchronized. New expected value: " + std::to_string(hdr->seq_port)));
             if (flags & S3TP_FLAG_ACK) {
@@ -278,10 +274,10 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
             LOG_DEBUG("RX: ----------- Reset Packet received -----------");
             // Hard reset of the whole internal status will be handled by s3tp module
             reset();
-            pthread_mutex_lock(&rx_mutex);
+            rxMutex.lock();
             updateInternalSequence(hdr->seq, false);
             sequenceToAck = expectedSequence;
-            pthread_mutex_unlock(&rx_mutex);
+            rxMutex.unlock();
             transportInterface->onReset((bool)(flags & S3TP_FLAG_ACK), sequenceToAck);
             break;
     }
@@ -329,9 +325,9 @@ bool RxModule::isCompleteMessageForPortAvailable(int port) {
 }
 
 bool RxModule::isNewMessageAvailable() {
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     bool result = !available_messages.empty();
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
 
     return result;
 }
@@ -362,7 +358,7 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
         return NULL;
     }
 
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     std::map<uint8_t, uint8_t>::iterator it = available_messages.begin();
     bool messageAssembled = false;
     std::vector<char> assembledData;
@@ -389,12 +385,12 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
     if (isCompleteMessageForPortAvailable(it->first)) {
         //New message is available, notify
         available_messages[it->first] = 1;
-        pthread_cond_signal(&available_msg_cond);
+        availableMsgCond.notify_all();
     } else {
         available_messages.erase(it->first);
     }
     //Increase global sequence
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
     //Copying the entire data array, as vector memory will be released at end of function
     char * data = new char[assembledData.size()];
     memcpy(data, assembledData.data(), assembledData.size());
@@ -414,7 +410,7 @@ void RxModule::flushQueues() {
 int RxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     int comp = 0;
     uint8_t seq1, seq2, offset;
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
 
     offset = current_port_sequence[element1->getHeader()->getPort()];
     seq1 = element1->getHeader()->seq_port - offset;
@@ -424,7 +420,7 @@ int RxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     } else if (seq1 > seq2) {
         comp = 1; //Element 2 is lower, hence has higher priority
     }
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
     return comp;
 }
 
@@ -437,11 +433,11 @@ bool RxModule::isElementValid(S3TP_PACKET * element) {
 bool RxModule::maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newElement) {
     uint8_t offset, headSeq, newSeq;
 
-    pthread_mutex_lock(&rx_mutex);
+    rxMutex.lock();
     offset = to_consume_global_seq;
     headSeq = queueHead->getHeader()->getGlobalSequence() - offset;
     newSeq = newElement->getHeader()->getGlobalSequence() - offset;
-    pthread_mutex_unlock(&rx_mutex);
+    rxMutex.unlock();
 
     return abs(newSeq - headSeq) >= MAX_TRANSMISSION_WINDOW;
 }
