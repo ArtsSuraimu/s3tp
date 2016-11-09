@@ -1,10 +1,3 @@
-/*
- * s3tp_types.h
- *
- *  Created on: Aug 11, 2016
- *      Author: dai
- */
-
 #ifndef CORE_S3TP_TYPES_H_
 #define CORE_S3TP_TYPES_H_
 
@@ -17,14 +10,16 @@
 #define S3TP_FLAG_ACK 0x02
 #define S3TP_FLAG_MORE_FRAGMENTS 0x04
 
-enum CONTROL_TYPE : uint8_t {
-    SETUP = 0x01,
-    SYNC = 0x02,
-    FIN = 0x04,
-    RESET = 0x08
-};
+//Flags and Controls
+#define FLAG_ACK 0x01
+#define FLAG_SYN 0x02
+#define FLAG_FIN 0x04
+#define FLAG_RST 0x08
+#define FLAG_CTRL 0x16
 
-//Eigth channel should be reserved for now
+#define CONTROL_SETUP 0x01
+
+//Eigth channel is reserved and should not be available for applications to use
 #define S3TP_VIRTUAL_CHANNELS 7
 
 typedef int SOCKET;
@@ -32,17 +27,19 @@ typedef int SOCKET;
 #pragma pack(push, 1)
 /**
  * Structure containing the header of an s3tp packet.
- * Each header is 8 bytes long and is setup as follows:
+ * Each header is 6 bytes long and is setup as follows:
  *
- * 				16 bits				8 bits		8 bits
- * ------------------------------------------------------
- * 				CRC				|  GLOB_SEQ  |  SUB_SEQ
- * ------------------------------------------------------
- * 			PDU LENGTH			|  PORT_SEQ  |   PORT
- * ------------------------------------------------------
+ * 				8 bits				        8 bits
+ * -----------------------------------------------------------
+ * 				SRC_PORT	    |          DEST_PORT
+ * -----------------------------------------------------------
+ * 			SEQUENCE NUMBER		|        ACK SEQUENCE
+ * -----------------------------------------------------------
+ *          PAYLOAD LENGTH             |        FLAGS
+ * -----------------------------------------------------------
  *
- * Additionally, the last 3 bits of PDU_LENGTH are reserved to the protocol,
- * while the last bit of PORT contains the fragmentation bit.
+ * The first 4 fields are 1 byte each; payload length is 10 bits long,
+ * while the flags field is 6 bits long.
  */
 //TODO: update doc
 typedef struct tag_s3tp_header
@@ -63,7 +60,7 @@ typedef struct tag_s3tp_header
 	uint8_t seq_port;		/* used for reordering */
 	uint16_t ack;
 
-	//Fragmentation bit functions (bit is the most significant bit of the port variable)
+	//Fragmentation bit functions (bit is the most significant bit of the pdu_length variable)
 	uint8_t moreFragments() {
 		return (uint8_t)((pdu_length >> 15) & 1);
 	}
@@ -204,7 +201,7 @@ struct S3TP_PACKET{
 };
 
 struct S3TP_CONTROL {
-    CONTROL_TYPE type;
+    uint8_t opcode;
 };
 
 #pragma pack(pop)

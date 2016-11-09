@@ -338,13 +338,15 @@ void TxModule::scheduleReset(bool ack, uint16_t ackSequence) {
  * Tells the other S3TP endpoint (if any), that this module has just been started and therefore
  * requests an initial sync. While all the sequence numbers on this side are typically set
  * to 0 at this stage, the other endpoint might have different sequences.
- * Upon receiving a response, the sequences expected by the other endpoint will be known.
+ *
+ * When receiving this message, the other party will know that this the protocol on this
+ * endpoint just started up, and will act accordingly (i.e. reset all open connections)
  *
  * @param ack  An ack flag to be set, in case we need to acknowledge a received setup packet (3-way handshake).
  */
 void TxModule::scheduleSetup(bool ack, uint16_t ackSequence) {
     S3TP_CONTROL control;
-    control.type = CONTROL_TYPE::SETUP;
+    control.opcode = CONTROL_SETUP;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
     packet->channel = DEFAULT_RESERVED_CHANNEL;
     packet->options = S3TP_ARQ;
