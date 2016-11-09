@@ -12,7 +12,9 @@
 #include <cstdio>
 #include <string>
 #include <iostream>
-#include <pthread.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 
 #define LOCK(mutex) pthread_mutex_lock(mutex)
 #define UNLOCK(mutex) pthread_mutex_unlock(mutex)
