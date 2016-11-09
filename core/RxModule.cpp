@@ -336,11 +336,13 @@ bool RxModule::isNewMessageAvailable() {
     return result;
 }
 
-void RxModule::waitForNextAvailableMessage(pthread_mutex_t * callerMutex) {
+void RxModule::waitForNextAvailableMessage(std::mutex * callerMutex) {
     if (isNewMessageAvailable()) {
         return;
     }
-    pthread_cond_wait(&available_msg_cond, callerMutex);
+    std::unique_lock<std::mutex> lock(*callerMutex);
+
+    availableMsgCond.wait(lock);
 }
 
 char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * port) {

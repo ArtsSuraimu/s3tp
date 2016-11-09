@@ -49,9 +49,9 @@ public:
     void cleanupClients();
 
 private:
-    pthread_t assembly_thread;
-    pthread_cond_t assembly_cond;
-    pthread_mutex_t s3tp_mutex;
+    std::thread assemblyThread;
+    std::condition_variable assemblyCond;
+    std::mutex s3tpMutex;
     bool active;
     Transceiver::Backend * transceiver;
 
@@ -65,11 +65,10 @@ private:
     //RxModule
     RxModule rx;
     void assemblyRoutine();
-    static void * staticAssemblyRoutine(void * args);
 
     //Clients
     std::map<uint8_t, Client*> clients;
-    pthread_mutex_t clients_mutex;
+    std::mutex clientsMutex;
     std::vector<uint8_t> disconnectedClients;
     int checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t msg_len);
     void notifyAvailabilityToClients();

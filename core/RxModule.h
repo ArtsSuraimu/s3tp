@@ -37,7 +37,7 @@ public:
     int closePort(uint8_t port);
     bool isActive();
     bool isNewMessageAvailable();
-    void waitForNextAvailableMessage(pthread_mutex_t * callerMutex);
+    void waitForNextAvailableMessage(std::mutex * callerMutex);
     char * getNextCompleteMessage(uint16_t * len, int * error, uint8_t * port);
     virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
     virtual bool isElementValid(S3TP_PACKET * element);
@@ -49,7 +49,7 @@ private:
     uint8_t to_consume_global_seq;
     uint16_t expectedSequence;
     pthread_mutex_t rx_mutex;
-    pthread_cond_t available_msg_cond;
+    std::condition_variable availableMsgCond;
 
     StatusInterface * statusInterface;
     TransportInterface * transportInterface;

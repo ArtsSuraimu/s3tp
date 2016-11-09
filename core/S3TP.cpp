@@ -5,34 +5,28 @@
 #include "S3TP.h"
 
 S3TP::S3TP() {
-    pthread_mutex_init(&clients_mutex, NULL);
-    pthread_mutex_init(&s3tp_mutex, NULL);
-    pthread_mutex_lock(&s3tp_mutex);
+    s3tpMutex.lock();
     reset();
     resetting = false;
-    pthread_mutex_unlock(&s3tp_mutex);
+    s3tpMutex.unlock();
 }
 
 S3TP::~S3TP() {
-    pthread_mutex_lock(&s3tp_mutex);
+    s3tpMutex.lock();
     bool toStop = active;
-    pthread_mutex_unlock(&s3tp_mutex);
+    s3tpMutex.unlock();
     if (toStop) {
         stop();
     }
 
-    pthread_cond_destroy(&assembly_cond);
     std::map<uint8_t, Client*>::iterator it;
-    pthread_mutex_lock(&clients_mutex);
+    clientsMutex.lock();
     while ((it = clients.begin()) != clients.end()) {
-        pthread_mutex_unlock(&clients_mutex);
+        clientsMutex.unlock();
         it->second->kill();
-        pthread_mutex_lock(&clients_mutex);
+        clientsMutex.lock();
     }
-    pthread_mutex_unlock(&clients_mutex);
-    pthread_mutex_destroy(&clients_mutex);
-    pthread_mutex_unlock(&s3tp_mutex);
-    pthread_mutex_destroy(&s3tp_mutex);
+    clientsMutex.unlock();
 }
 
 void S3TP::reset() {
@@ -44,7 +38,7 @@ void S3TP::reset() {
 }
 
 int S3TP::init(TRANSCEIVER_CONFIG * config) {
-    pthread_mutex_lock(&s3tp_mutex);
+    s3tpMutex.lock();
 
     active = true;
 
@@ -56,58 +50,58 @@ int S3TP::init(TRANSCEIVER_CONFIG * config) {
 
     rx.setStatusInterface(this);
     rx.setTransportInterface(this);
-    pthread_mutex_unlock(&s3tp_mutex);
+    s3tpMutex.unlock();
 
     transceiver->start();
 
-    pthread_mutex_lock(&s3tp_mutex);
+    s3tpMutex.lock();
     rx.startModule();
     tx.startRoutine(rx.link);
 
-    int id = pthread_create(&assembly_thread, NULL, &staticAssemblyRoutine, this);
-    LOG_DEBUG(std::string("Assembly Thread (id " + std::to_string(id) + "): START"));
+    assemblyThread = std::thread(&S3TP::assemblyRoutine, this);
+    LOG_DEBUG(std::string("Assembly Thread: START"));
 
-    pthread_mutex_unlock(&s3tp_mutex);
+    s3tpMutex.unlock();
 
     return CODE_SUCCESS;
 }
 
 int S3TP::stop() {
     //Deactivating module
-    pthread_mutex_lock(&s3tp_mutex);
+    s3tpMutex.lock();
     active = false;
 
     //Stop modules connected to Link Layer
     tx.stopRoutine();
     rx.stopModule();
-    pthread_mutex_unlock(&s3tp_mutex);
+    s3tpMutex.unlock();
 
     //Wait for assembly thread to finish
-    pthread_join(assembly_thread, NULL);
+    assemblyThread.join();
 
     //Stop the transceiver instance
-    pthread_mutex_lock(&s3tp_mutex);
+    s3tpMutex.lock();
     transceiver->stop();
     delete transceiver;
-    pthread_mutex_unlock(&s3tp_mutex);
+    s3tpMutex.unlock();
 
     return CODE_SUCCESS;
 }
 
 Client * S3TP::getClientConnectedToPort(uint8_t port) {
-    pthread_mutex_lock(&clients_mutex);
+    clientsMutex.lock();
     std::map<uint8_t, Client *>::iterator it = clients.find(port);
     if (it == clients.end()) {
-        pthread_mutex_unlock(&clients_mutex);
+        clientsMutex.unlock();
         return NULL;
     }
     Client * cli = it->second;
-    pthread_mutex_unlock(&clients_mutex);
+    clientsMutex.unlock();
     return cli;
 }
 
 void S3TP::cleanupClients() {
-    pthread_mutex_lock(&clients_mutex);
+    clientsMutex.lock();
     for (auto const& port: disconnectedClients) {
         Client * cli = clients[port];
         //Client disconnected from port. Mark that port as available again.
@@ -118,7 +112,7 @@ void S3TP::cleanupClients() {
         }
     }
     disconnectedClients.clear();
-    pthread_mutex_unlock(&clients_mutex);
+    clientsMutex.unlock();
 }
 
 int S3TP::sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
@@ -130,9 +124,9 @@ int S3TP::sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len
      * */
     int availability;
 
-    pthread_mutex_lock(&s3tp_mutex);
+    s3tpMutex.lock();
     bool isActive = active;
-    pthread_mutex_unlock(&s3tp_mutex);
+    s3tpMutex.unlock();
     if (isActive) {
         availability = checkTransmissionAvailability(port, channel, (uint16_t)len);
         if (availability != CODE_SUCCESS) {
@@ -213,13 +207,13 @@ void S3TP::assemblyRoutine() {
     Client * cli;
     uint8_t  port;
 
-    pthread_mutex_lock(&s3tp_mutex);
+    s3tpMutex.lock();
     while(active && rx.isActive()) {
         if (!rx.isNewMessageAvailable()) {
-            rx.waitForNextAvailableMessage(&s3tp_mutex);
+            rx.waitForNextAvailableMessage(&s3tpMutex);
             continue;
         }
-        pthread_mutex_unlock(&s3tp_mutex);
+        s3tpMutex.unlock();
         data = rx.getNextCompleteMessage(&len, &error, &port);
         if (error != CODE_SUCCESS) {
             LOG_WARN("Error while trying to consume message");
@@ -228,7 +222,7 @@ void S3TP::assemblyRoutine() {
         LOG_DEBUG(std::string("Correctly consumed data from queue " + std::to_string((int)port)
                               + " (" + std::to_string(len) + " bytes)"));
 
-        pthread_mutex_lock(&clients_mutex);
+        clientsMutex.lock();
         cli = clients[port];
         if (cli != NULL) {
             cli->send(data, len);
@@ -237,19 +231,14 @@ void S3TP::assemblyRoutine() {
             LOG_WARN(std::string("Port " + std::to_string((int)port)
                                  + " is not open. Couldn't forward data to application"));
         }
-        pthread_mutex_unlock(&clients_mutex);
+        clientsMutex.unlock();
 
-        pthread_mutex_lock(&s3tp_mutex);
+        s3tpMutex.lock();
     }
     //S3TP (or Rx module) was deactivated
-    pthread_mutex_unlock(&s3tp_mutex);
+    s3tpMutex.unlock();
 
     pthread_exit(NULL);
-}
-
-void * S3TP::staticAssemblyRoutine(void * args) {
-    static_cast<S3TP*>(args)->assemblyRoutine();
-    return NULL;
 }
 
 int S3TP::checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t msg_len) {
@@ -277,11 +266,11 @@ void S3TP::notifyAvailabilityToClients() {
     control.error = 0;
 
     //Notifies all clients
-    pthread_mutex_lock(&clients_mutex);
+    clientsMutex.lock();
     for (auto const &it : clients) {
         it.second->sendControlMessage(control);
     }
-    pthread_mutex_unlock(&clients_mutex);
+    clientsMutex.unlock();
 }
 
 /*
@@ -289,22 +278,22 @@ void S3TP::notifyAvailabilityToClients() {
  */
 void S3TP::onApplicationDisconnected(void *params) {
     Client * cli = (Client *)params;
-    pthread_mutex_lock(&clients_mutex);
+    clientsMutex.lock();
     disconnectedClients.push_back(cli->getAppPort());
-    pthread_mutex_unlock(&clients_mutex);
+    clientsMutex.unlock();
 }
 
 void S3TP::onApplicationConnected(void *params) {
     Client * cli = (Client * )params;
-    pthread_mutex_lock(&clients_mutex);
+    clientsMutex.lock();
     clients[cli->getAppPort()] = cli;
-    pthread_mutex_unlock(&clients_mutex);
+    clientsMutex.unlock();
     //Start setup if first time starting the protocol
-    pthread_mutex_lock(&s3tp_mutex);
+    s3tpMutex.lock();
     if (!setupPerformed) {
         tx.scheduleSetup(false, 0);
     }
-    pthread_mutex_unlock(&s3tp_mutex);
+    s3tpMutex.unlock();
 }
 
 int S3TP::onApplicationMessage(void * data, size_t len, void * params) {
@@ -342,13 +331,13 @@ void S3TP::onChannelStatusChanged(uint8_t channel, bool active) {
     control.controlMessageType = AVAILABLE;
     control.error = 0;
     //Notify previously blocked clients
-    pthread_mutex_lock(&clients_mutex);
+    clientsMutex.lock();
     for (auto const &it : clients) {
         if (it.second->getVirtualChannel() == channel) {
             it.second->sendControlMessage(control);
         }
     }
-    pthread_mutex_unlock(&clients_mutex);
+    clientsMutex.unlock();
 }
 
 void S3TP::onError(int error, void * params) {
@@ -356,7 +345,7 @@ void S3TP::onError(int error, void * params) {
 }
 
 void S3TP::onOutputQueueAvailable(uint8_t port) {
-    pthread_mutex_lock(&clients_mutex);
+    clientsMutex.lock();
 
     std::map<uint8_t, Client*>::iterator it = clients.find(port);
     if (it != clients.end()) {
@@ -367,7 +356,7 @@ void S3TP::onOutputQueueAvailable(uint8_t port) {
         it->second->sendControlMessage(control);
     }
 
-    pthread_mutex_unlock(&clients_mutex);
+    clientsMutex.unlock();
 }
 
 /*
@@ -380,7 +369,7 @@ void S3TP::onOutputQueueAvailable(uint8_t port) {
  * @param ack  Additional ack flag set in the received setup packet
  */
 void S3TP::onSetup(bool ack, uint16_t sequenceNumber) {
-    pthread_mutex_lock(&s3tp_mutex);
+    s3tpMutex.lock();
     if (ack) {
         // In case we received an ack for sync
         if (setupInitiated) {
@@ -398,7 +387,7 @@ void S3TP::onSetup(bool ack, uint16_t sequenceNumber) {
         tx.scheduleSetup(true, sequenceNumber);
         setupPerformed = false;
     }
-    pthread_mutex_unlock(&s3tp_mutex);
+    s3tpMutex.unlock();
 }
 
 /**
@@ -408,7 +397,7 @@ void S3TP::onSetup(bool ack, uint16_t sequenceNumber) {
  * @param ack  Additional ack flag set in the received reset packet
  */
 void S3TP::onReset(bool ack, uint16_t sequenceNumber) {
-    pthread_mutex_lock(&s3tp_mutex);
+    s3tpMutex.lock();
     if (ack && resetting) {
         // Reset complete. We're good to go
         resetting = false;
@@ -417,7 +406,7 @@ void S3TP::onReset(bool ack, uint16_t sequenceNumber) {
         tx.reset();
         tx.scheduleReset(true, sequenceNumber);
     }
-    pthread_mutex_unlock(&s3tp_mutex);
+    s3tpMutex.unlock();
 }
 
 void S3TP::onReceivedPacket(uint16_t sequenceNumber) {
@@ -436,26 +425,29 @@ void S3TP::onAcknowledgement(uint16_t sequenceAck) {
 
 //TODO: implement
 void S3TP::onConnectionRequest(uint8_t port, uint16_t sequenceNumber) {
-    rx.openPort(port);
+    clientsMutex.lock();
     Client * cli = clients[port];
     if (cli == nullptr) {
         //No application listening on the given port. Respond with a NACK
         //TODO: respond with nack
+        clientsMutex.unlock();
         return;
     }
+    rx.openPort(port);
     uint8_t defaultOpts = S3TP_ARQ;
     tx.scheduleSync(port, cli->getVirtualChannel(), defaultOpts, true, sequenceNumber);
+    clientsMutex.unlock();
 }
 
 void S3TP::onConnectionAccept(uint8_t port, uint16_t sequenceNumber) {
     tx.scheduleAcknowledgement(sequenceNumber);
     //Notify client that connection is now open
-    pthread_mutex_lock(&clients_mutex);
+    clientsMutex.lock();
     Client * cli = clients[port];
     if (cli != nullptr) {
         cli->acceptConnect();
     }
-    pthread_mutex_unlock(&clients_mutex);
+    clientsMutex.unlock();
 }
 
 void S3TP::onConnectionClose(uint8_t port, uint16_t sequenceNumber) {
@@ -463,10 +455,10 @@ void S3TP::onConnectionClose(uint8_t port, uint16_t sequenceNumber) {
     //No 4-way close. We know the connection has been closed and that's it.
     rx.closePort(port);
     //Notify client that connection is now closed
-    pthread_mutex_lock(&clients_mutex);
+    clientsMutex.lock();
     Client * cli = clients[port];
     if (cli != nullptr) {
         cli->closeConnection();
     }
-    pthread_mutex_unlock(&clients_mutex);
+    clientsMutex.unlock();
 }
