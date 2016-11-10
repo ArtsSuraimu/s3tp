@@ -4,13 +4,7 @@
 #include <stdlib.h>
 #include "Constants.h"
 
-//S3TP Header Flags
-#define S3TP_FLAG_DATA 0x00
-#define S3TP_FLAG_CTRL 0x01
-#define S3TP_FLAG_ACK 0x02
-#define S3TP_FLAG_MORE_FRAGMENTS 0x04
-
-//Flags and Controls
+//S3TP header Flags and Controls
 #define FLAG_ACK 0x01
 #define FLAG_SYN 0x02
 #define FLAG_FIN 0x04
@@ -44,21 +38,31 @@ typedef int SOCKET;
 //TODO: update doc
 typedef struct tag_s3tp_header
 {
-	uint16_t crc;
-	/* Global Sequence Number
-	 * First Byte: Seq_head,
-     * 2nd Byte: Seq_sub used for packet fragmentation
-    */
-	uint16_t seq;
+    /*
+     * Source port (application on the endpoint which is sending the packet)
+     */
+    uint8_t srcPort;
+
+    /*
+     * Destination port (application on the endpoint which is receiving the packet)
+     */
+    uint8_t destPort;
+
+    /*
+     * Sequence number, relative to the stream
+     */
+	uint8_t seq;
+
+    /*
+     * Acknowledgement number
+     */
+    uint8_t ack;
 
 	/*
 	 * Contains the length of the payload of this current packet.
 	 * The last 2 bits are reserved for the protocol.
 	 */
 	uint16_t pdu_length;
-	uint8_t port;
-	uint8_t seq_port;		/* used for reordering */
-	uint16_t ack;
 
 	//Fragmentation bit functions (bit is the most significant bit of the pdu_length variable)
 	uint8_t moreFragments() {
@@ -73,69 +77,62 @@ typedef struct tag_s3tp_header
 		pdu_length &= ~(1 << 15);
 	}
 
-	//Getters and setters
-	uint8_t getPort() {
-		return port & (uint8_t)0x7F;
-	}
-
-	void setPort(uint8_t port) {
-		uint8_t fragFlag = moreFragments();
-		this->port = (fragFlag << 7) | port;
-	}
-
-	uint8_t getGlobalSequence() {
-		return (uint8_t) (seq >> 8);
-	}
-
-	void setGlobalSequence(uint8_t global_seq) {
-		seq = (uint16_t )((seq & 0xFF) | (global_seq << 8));
-	}
-
-	uint8_t getSubSequence() {
-		return (uint8_t) (seq & 0xFF);
-	}
-
-	void setSubSequence(uint8_t sub_seq) {
-		seq = (uint16_t)((seq & 0xFF00) | sub_seq);
-	}
-
     uint16_t getPduLength() {
-        return (uint16_t )(pdu_length & 0x1FFF);
+        //Just taking the 10 least significant bits
+        return (uint16_t )(pdu_length & 0x3FF);
     }
 
     void setPduLength(uint16_t pdu_len) {
-        pdu_length = (uint16_t)((pdu_length & 0x2000) | pdu_len);
+        //6 most significant bits must remain the same
+        pdu_length = (uint16_t)((pdu_length & 0xFC00) | (pdu_len & 0x3FF));
     }
 
 	uint8_t getFlags() {
-		return (uint8_t ) (pdu_length >> 13);
+		return (uint8_t ) (pdu_length >> 10);
 	}
 
 	void setFlags(uint8_t flags) {
-		pdu_length = (uint16_t )((pdu_length & 0x1FFF) | (flags << 13));
-	}
-
-	void setData(bool data) {
-		if (data) {
-			pdu_length |= (0 << 13);
-		} else {
-			pdu_length &= ~(0 << 13);
-		}
+        //10 least significant bits must remain the same
+        pdu_length = (uint16_t) ((pdu_length & 0x3FF) | (flags << 10));
 	}
 
 	void setAck(bool ack) {
 		if (ack) {
-			pdu_length |= (1 << 14);
+			pdu_length |= (1 << 10);
 		} else {
-			pdu_length &= ~(1 << 14);
+			pdu_length &= ~(1 << 10);
 		}
 	}
 
+    void setSyn(bool syn) {
+        if (syn) {
+            pdu_length |= (1 << 11);
+        } else {
+            pdu_length &= ~(1 << 11);
+        }
+    }
+
+    void setFin(bool fin) {
+        if (fin) {
+            pdu_length |= (1 << 12);
+        } else {
+            pdu_length &= ~(1 << 12);
+        }
+    }
+
+    void setRst(bool rst) {
+        if (rst) {
+            pdu_length |= (1 << 13);
+        } else {
+            pdu_length &= ~(1 << 13);
+        }
+    }
+
 	void setCtrl(bool control) {
 		if (control) {
-			pdu_length |= (1 << 13);
+			pdu_length |= (1 << 14);
 		} else {
-			pdu_length &= ~(1 << 13);
+			pdu_length &= ~(1 << 14);
 		}
 	}
 
@@ -166,7 +163,7 @@ struct S3TP_PACKET{
 		memcpy(getPayload(), pdu, pduLen);
 		S3TP_HEADER * header = getHeader();
 		header->setPduLength(pduLen);
-        header->setFlags(S3TP_FLAG_DATA);
+        header->setFlags(0);
 	}
 
 	/**
