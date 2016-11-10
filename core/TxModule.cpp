@@ -20,13 +20,13 @@ TxModule::TxModule() {
     ackPacket.options = S3TP_ARQ;
     ackPacket.channel = DEFAULT_RESERVED_CHANNEL;
     S3TP_HEADER * hdr = ackPacket.getHeader();
-    hdr->seq_port = 0;
+    hdr->srcPort = 0;
+    hdr->destPort = 0;
+    hdr->seq = 0;
     hdr->setAck(true);
     hdr->unsetMoreFragments();
 
     //Timer setup
-    ackTimer.tv_sec = ACK_WAIT_TIME;
-    ackTimer.tv_nsec = 0;
     elapsedTime = 0;
     retransmissionCount = 0;
 
@@ -62,7 +62,6 @@ void TxModule::reset() {
 void TxModule::sendAcknowledgement() {
     S3TP_HEADER * hdr = ackPacket.getHeader();
     hdr->ack = expectedSequence;
-    hdr->crc = 0;
 
     bool arq = S3TP_ARQ;
     LOG_DEBUG(std::string("TX: ----------- Empty Ack Packet with sequence "
@@ -220,19 +219,19 @@ void TxModule::_timedWait() {
 
 void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
     S3TP_HEADER * hdr = pkt->getHeader();
-    currentPort = hdr->getPort();
     sendingFragments = hdr->moreFragments();
 
-    hdr->setGlobalSequence(global_seq_num);
+    //TODO: set properly and update to_consume_seq inside buffer
+    hdr->seq = global_seq_num;
     if (!hdr->moreFragments()) {
         //Need to increase the current global sequence
         global_seq_num++;
     }
-    to_consume_port_seq[hdr->getPort()]++;
 
     //Acks can be sent in piggybacking, only inside non ctrl packets
-    if (scheduledAck && !(hdr->getFlags() & S3TP_FLAG_CTRL)) {
+    if (scheduledAck && !(hdr->getFlags() & FLAG_CTRL)) {
         hdr->setAck(true);
+        //TODO: proper acks
         hdr->ack = expectedSequence;
         scheduledAck = false;
     }
@@ -242,10 +241,10 @@ void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
 
     txMutex.unlock();
 
-    LOG_DEBUG(std::string("TX: Data Packet sent from port " + std::to_string((int)hdr->getPort())
-                          + " to Link Layer -> glob_seq: " + std::to_string((int)hdr->getGlobalSequence())
-                          + ", sub_seq: " + std::to_string((int)hdr->getSubSequence())
-                          + ", port_seq: " + std::to_string((int)hdr->seq_port)));
+    LOG_DEBUG(std::string("[TX] Data Packet sent. SRC: " + std::to_string((int)hdr->srcPort)
+                          + ", DST: " + std::to_string((int)hdr->destPort)
+                          + ", SEQ: " + std::to_string((int)hdr->seq)
+                          + ", LEN: " + std::to_string((int)hdr->pdu_length)));
 
     bool arq = pkt->options & S3TP_ARQ;
 
@@ -259,9 +258,11 @@ void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
     }
 
     //Since a packet was just popped from the buffer, the queue is definitely available
-    if (outBuffer->getSizeOfQueue(hdr->getPort()) + 1 == MAX_QUEUE_SIZE
+
+    //TODO: use correct port
+    if (outBuffer->getSizeOfQueue(hdr->srcPort) + 1 == MAX_QUEUE_SIZE
         && statusInterface != nullptr) {
-        statusInterface->onOutputQueueAvailable(hdr->getPort());
+        statusInterface->onOutputQueueAvailable(hdr->srcPort);
     }
 
     txMutex.lock();
@@ -269,14 +270,14 @@ void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
 
 void TxModule::_sendControlPacket(S3TP_PACKET *pkt) {
     S3TP_HEADER * hdr = pkt->getHeader();
-    hdr->setGlobalSequence(global_seq_num++);
+    //TODO: use correct sequence
+    hdr->seq = global_seq_num++;
 
     safeQueue.push_back(pkt);
     txMutex.unlock();
 
-    LOG_DEBUG(std::string("TX: Control Packet sent to Link Layer -> glob_seq: "
-                          + std::to_string((int)hdr->getGlobalSequence())
-                          + ", sub_seq: " + std::to_string((int)hdr->getSubSequence())));
+    LOG_DEBUG(std::string("[TX]: Control Packet sent to Link Layer -> seq: "
+                          + std::to_string((int)hdr->seq)));
 
     bool arq = pkt->options & S3TP_ARQ;
 
@@ -314,19 +315,19 @@ void TxModule::scheduleAcknowledgement(uint16_t ackSequence) {
  * After reset request is sent out, the worker thread waits until it receives an acknowledgement.
  */
 void TxModule::scheduleReset(bool ack, uint16_t ackSequence) {
+    //TODO: reimplement logic
     S3TP_CONTROL control;
-    control.type = CONTROL_TYPE::RESET;
+    //control.type = CONTROL_TYPE::RESET;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
     packet->channel = DEFAULT_RESERVED_CHANNEL;
     packet->options = S3TP_ARQ;
     S3TP_HEADER * hdr = packet->getHeader();
     hdr->seq = 0;
-    hdr->seq_port = 0;
-    hdr->setPort(0);
+    hdr->srcPort = 0;
+    hdr->destPort = 0;
     hdr->setAck(ack);
     hdr->setCtrl(true);
     hdr->ack = ackSequence;
-    hdr->crc = calc_checksum((char *)&control, sizeof(S3TP_CONTROL));
 
     txMutex.lock();
     controlQueue.push(packet);
@@ -352,12 +353,10 @@ void TxModule::scheduleSetup(bool ack, uint16_t ackSequence) {
     packet->options = S3TP_ARQ;
     S3TP_HEADER * hdr = packet->getHeader();
     hdr->seq = 0;
-    hdr->seq_port = 0;
-    hdr->setPort(0);
+    hdr->srcPort = 0;
     hdr->setAck(ack);
     hdr->setCtrl(true);
     hdr->ack = ackSequence;
-    hdr->crc = calc_checksum((char *)&control, sizeof(S3TP_CONTROL));
 
     txMutex.lock();
     controlQueue.push(packet);
@@ -376,7 +375,8 @@ void TxModule::scheduleSetup(bool ack, uint16_t ackSequence) {
  */
 void TxModule::scheduleSync(uint8_t port, uint8_t channel, uint8_t options, bool ack, uint16_t ackSequence) {
     S3TP_CONTROL control;
-    control.type = CONTROL_TYPE::SYNC;
+    //TODO: reimplement
+    //control.type = CONTROL_TYPE::SYNC;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
     packet->channel = channel;
     packet->options = options;
@@ -384,7 +384,7 @@ void TxModule::scheduleSync(uint8_t port, uint8_t channel, uint8_t options, bool
     hdr->setAck(ack);
     hdr->setCtrl(true);
     hdr->ack = ackSequence;
-    hdr->setPort(port);
+    hdr->srcPort = port;
 
     enqueuePacket(packet, 0, false, channel, options);
     LOG_DEBUG(std::string("TX: Scheduled SYNC Packet for port " + std::to_string((int)port)));
@@ -397,7 +397,8 @@ void TxModule::scheduleSync(uint8_t port, uint8_t channel, uint8_t options, bool
  */
 void TxModule::scheduleFin(uint8_t port, uint8_t channel, uint8_t options, bool ack, uint16_t ackSequence) {
     S3TP_CONTROL control;
-    control.type = CONTROL_TYPE::FIN;
+    //TODO: reimplement
+    //control.type = CONTROL_TYPE::FIN;
     S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
     packet->channel = channel;
     packet->options = options;
@@ -405,7 +406,7 @@ void TxModule::scheduleFin(uint8_t port, uint8_t channel, uint8_t options, bool 
     hdr->setAck(ack);
     hdr->setCtrl(true);
     hdr->ack = ackSequence;
-    hdr->setPort(port);
+    hdr->srcPort = port;
 
     enqueuePacket(packet, 0, false, channel, options);
     LOG_DEBUG(std::string("TX: Scheduled FIN Packet for port " + std::to_string((int)port)));
@@ -474,10 +475,10 @@ void TxModule::retransmitPackets() {
 
         txMutex.unlock();
 
-        LOG_DEBUG(std::string("TX: Packet sent from port " + std::to_string((int)hdr->getPort())
-                              + " to Link Layer -> glob_seq: " + std::to_string((int)hdr->getGlobalSequence())
-                              + ", sub_seq: " + std::to_string((int)hdr->getSubSequence())
-                              + ", port_seq: " + std::to_string((int)hdr->seq_port)));
+        LOG_DEBUG(std::string("[TX] Data Packet sent. SRC: " + std::to_string((int)hdr->srcPort)
+                              + ", DST: " + std::to_string((int)hdr->destPort)
+                              + ", SEQ: " + std::to_string((int)hdr->seq)
+                              + ", LEN: " + std::to_string((int)hdr->pdu_length)));
 
         bool arq = pkt->options & S3TP_ARQ;
 
@@ -596,21 +597,16 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
         return CODE_INACTIVE_ERROR;
     }
     S3TP_HEADER * hdr = packet->getHeader();
-    hdr->setData(true);
     //Not setting global seq, as it will be set by transmission thread, when actually sending the packet to L2
-    hdr->setSubSequence(frag_no);
     if (more_fragments) {
         hdr->setMoreFragments();
     } else {
         hdr->unsetMoreFragments();
     }
     //Increasing port sequence
-    int port = hdr->getPort();
-    hdr->seq_port = port_sequence[port]++;
+    int port = hdr->srcPort;
+    hdr->seq = port_sequence[port]++;
     txMutex.unlock();
-
-    uint16_t crc = calc_checksum(packet->getPayload(), hdr->getPduLength());
-    hdr->crc = crc;
 
     outBuffer->write(packet);
     txCond.notify_all();
@@ -623,9 +619,9 @@ int TxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     uint8_t seq1, seq2, offset;
     txMutex.lock();
 
-    offset = to_consume_port_seq[element1->getHeader()->getPort()];
-    seq1 = element1->getHeader()->seq_port - offset;
-    seq2 = element2->getHeader()->seq_port - offset;
+    offset = to_consume_port_seq[element1->getHeader()->srcPort];
+    seq1 = element1->getHeader()->seq - offset;
+    seq2 = element2->getHeader()->seq - offset;
     if (seq1 < seq2) {
         comp = -1; //Element 1 is lower, hence has higher priority
     } else if (seq1 > seq2) {
