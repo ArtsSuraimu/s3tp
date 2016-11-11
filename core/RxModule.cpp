@@ -158,13 +158,9 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     //Checking CRC
     S3TP_HEADER * hdr = packet->getHeader();
     //TODO: check if pdu length + header size > total length (there might've been an error), otherwise buffer overflow
-    if (!verify_checksum(packet->getPayload(), hdr->getPduLength(), hdr->crc)) {
-        LOG_WARN(std::string("Wrong CRC for packet " + std::to_string((int)hdr->getGlobalSequence())));
-        return CODE_ERROR_CRC_INVALID;
-    }
 
     uint8_t flags = hdr->getFlags();
-    if (flags & S3TP_FLAG_CTRL) {
+    if (flags & FLAG_CTRL) {
         S3TP_CONTROL * control = (S3TP_CONTROL *)packet->getPayload();
         if (!updateInternalSequence(hdr->seq, hdr->moreFragments())) {
             // Returning immediately. Packet sequence is wrong, hence it will be dropped right away
@@ -175,16 +171,14 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         // In case ACK flag is set as well, it will be handled by handleControlPacket
         return handleControlPacket(hdr, control);
     }
-    if (flags & S3TP_FLAG_ACK) {
+    if (flags & FLAG_ACK) {
         LOG_DEBUG("RX: ----------- Ack received -----------");
         handleAcknowledgement(hdr->ack);
     }
-    if (!(flags & S3TP_FLAG_DATA)) {
-        return CODE_SUCCESS;
-    }
+    //TODO: handle other flags contained in the header
 
     //No need for locking
-    if (inBuffer->getSizeOfQueue(hdr->getPort()) >= MAX_QUEUE_SIZE) {
+    if (inBuffer->getSizeOfQueue(hdr->destPort) >= MAX_QUEUE_SIZE) {
         //Dropping packet right away since queue is full anyway and force sender to retransmit
         transportInterface->onReceivedPacket(expectedSequence);
         return CODE_SERVER_QUEUE_FULL;
@@ -199,10 +193,11 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         return CODE_ERROR_INCONSISTENT_STATE;
     }
 
-    if (!isPortOpen(hdr->getPort())) {
+    //TODO: change logic
+    if (!isPortOpen(hdr->destPort)) {
         //Dropping packet, as there is no application to receive it
-        LOG_INFO(std::string("Incoming packet " + std::to_string(hdr->getGlobalSequence())
-                             + "for port " + std::to_string(hdr->getPort())
+        LOG_INFO(std::string("Incoming packet " + std::to_string(hdr->seq)
+                             + "for port " + std::to_string(hdr->destPort)
                              + " was dropped because port is closed"));
         return CODE_ERROR_PORT_CLOSED;
     } else {
@@ -213,17 +208,16 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
             return result;
         }
 
-        LOG_DEBUG(std::string("RX: Packet received from SPI to port "
-                              + std::to_string((int)hdr->getPort())
-                              + " -> glob_seq " + std::to_string((int)hdr->getGlobalSequence())
-                              + ", sub_seq " + std::to_string((int)hdr->getSubSequence())
-                              + ", port_seq " + std::to_string((int)hdr->seq_port)));
+        LOG_DEBUG(std::string("[RX] Packet received. SRC: " + std::to_string((int)hdr->srcPort)
+                              + ", DST: " + std::to_string((int)hdr->destPort)
+                              + ", SEQ: " + std::to_string((int)hdr->seq)
+                              + ", LEN: " + std::to_string((int)hdr->pdu_length)));
     }
 
     rxMutex.lock();
-    if (isCompleteMessageForPortAvailable(hdr->getPort())) {
+    if (isCompleteMessageForPortAvailable(hdr->destPort)) {
         //New message is available, notify
-        available_messages[hdr->getPort()] = 1;
+        available_messages[hdr->destPort] = 1;
         availableMsgCond.notify_all();
     }
     rxMutex.unlock();
@@ -235,7 +229,8 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
     uint16_t sequenceToAck;
     uint8_t flags = hdr->getFlags();
     //Handling control message
-    switch (control->type) {
+    //TODO: reimplement properly
+    /*switch (control->type) {
         case CONTROL_TYPE::SETUP:
             LOG_DEBUG("RX: ----------- Setup Packet received -----------");
             // Forcefully clearing everything that was in queue up until now
@@ -280,7 +275,7 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
             rxMutex.unlock();
             transportInterface->onReset((bool)(flags & S3TP_FLAG_ACK), sequenceToAck);
             break;
-    }
+    }*/
 
     return CODE_SUCCESS;
 }
@@ -304,14 +299,15 @@ bool RxModule::isCompleteMessageForPortAvailable(int port) {
     while (node != NULL) {
         S3TP_PACKET * pkt = node->element;
         S3TP_HEADER * hdr = pkt->getHeader();
-        if (hdr->seq_port != (current_port_sequence[port] + fragment)) {
+        //TODO: reimplement properly
+        if (hdr->seq != (current_port_sequence[port] + fragment)) {
             //Packet in queue is not the one with highest priority
             break; //Will return false
-        } else if (hdr->moreFragments() && hdr->getSubSequence() != fragment) {
+        } else if (hdr->moreFragments() && hdr->seq != fragment) {
             //Current fragment number is not the expected number,
             // i.e. at least one fragment is missing to complete the message
             break; //Will return false
-        } else if (!hdr->moreFragments() && hdr->getSubSequence() == fragment) {
+        } else if (!hdr->moreFragments() && hdr->seq == fragment) {
             //Packet is last fragment, message is complete
             q->unlock();
             return true;
@@ -365,7 +361,7 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
     while (!messageAssembled) {
         S3TP_PACKET * pkt = inBuffer->getNextPacket(it->first);
         S3TP_HEADER * hdr = pkt->getHeader();
-        if (hdr->seq_port != current_port_sequence[it->first]) {
+        if (hdr->seq != current_port_sequence[it->first]) {
             *error = CODE_ERROR_INCONSISTENT_STATE;
             LOG_ERROR("RX: inconsistency between packet sequence port and expected sequence port");
             return NULL;
@@ -412,9 +408,9 @@ int RxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     uint8_t seq1, seq2, offset;
     rxMutex.lock();
 
-    offset = current_port_sequence[element1->getHeader()->getPort()];
-    seq1 = element1->getHeader()->seq_port - offset;
-    seq2 = element2->getHeader()->seq_port - offset;
+    offset = current_port_sequence[element1->getHeader()->destPort];
+    seq1 = element1->getHeader()->seq - offset;
+    seq2 = element2->getHeader()->seq - offset;
     if (seq1 < seq2) {
         comp = -1; //Element 1 is lower, hence has higher priority
     } else if (seq1 > seq2) {
@@ -435,8 +431,8 @@ bool RxModule::maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newEle
 
     rxMutex.lock();
     offset = to_consume_global_seq;
-    headSeq = queueHead->getHeader()->getGlobalSequence() - offset;
-    newSeq = newElement->getHeader()->getGlobalSequence() - offset;
+    headSeq = queueHead->getHeader()->seq - offset;
+    newSeq = newElement->getHeader()->seq - offset;
     rxMutex.unlock();
 
     return abs(newSeq - headSeq) >= MAX_TRANSMISSION_WINDOW;
