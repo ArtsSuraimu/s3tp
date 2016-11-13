@@ -16,6 +16,8 @@ set(DEBUG_CORE_FILES
         ../core/S3tpShared.cpp
         ../core/Logger.h
         ../core/Constants.h
+        ../core/Connection.h
+        ../core/Connection.cpp
         ../core/PriorityQueue.h
         ../core/CommonTypes.h
         ../core/TxModule.cpp

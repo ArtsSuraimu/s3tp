@@ -34,6 +34,8 @@ set(S3TP_CORE_FILES
         ../core/Client.cpp
         ../core/Client.h
         ../core/ClientInterface.h
+        ../core/Connection.h
+        ../core/Connection.cpp
         ../core/TransportInterface.h
         ../core/StatusInterface.h
         ../core/PolicyActor.h
