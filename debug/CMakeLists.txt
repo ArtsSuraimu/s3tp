@@ -16,6 +16,9 @@ set(DEBUG_CORE_FILES
         ../core/S3tpShared.cpp
         ../core/Logger.h
         ../core/Constants.h
+        ../core/ConnectionManager.h
+        ../core/ConnectionManager.cpp
+        ../core/ConnectionStatusInterface.h
         ../core/Connection.h
         ../core/Connection.cpp
         ../core/PriorityQueue.h
