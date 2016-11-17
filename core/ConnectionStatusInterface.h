@@ -12,6 +12,7 @@ class Connection;
 class ConnectionStatusInterface {
 public:
     void onConnectionStatusChanged(Connection& connection);
+    void onConnectionOutOfBandRequested(S3TP_PACKET * pkt);
     void onConnectionError(Connection& connection, std::string error);
 };
 

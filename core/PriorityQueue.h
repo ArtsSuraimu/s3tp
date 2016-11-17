@@ -211,6 +211,7 @@ void PriorityQueue<T>::clear() {
 	while (ref != NULL) {
 		head = ref->next;
 		delete ref;
+		//TODO: delete element?
 		ref = head;
 	}
 	tail = head;
