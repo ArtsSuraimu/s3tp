@@ -44,12 +44,8 @@ public:
     void setStatusInterface(StatusInterface * statusInterface);
 
     //S3TP Control APIs
-    void scheduleAcknowledgement(uint16_t ackSequence);
-    void scheduleReset(bool ack, uint16_t ackSequence);
-    void scheduleSetup(bool ack, uint16_t ackSequence);
-    void scheduleSync(uint8_t port, uint8_t channel, uint8_t options, bool ack, uint16_t ackSequence);
-    void scheduleFin(uint8_t port, uint8_t channel, uint8_t options, bool ack, uint16_t ackSequence);
-    void notifyAcknowledgement(uint16_t ackSequence);
+    void scheduleInitialSetup();
+    void notifyInitialSetup();
 
     //Public channel and link methods
     void notifyLinkAvailability(bool available);
@@ -67,11 +63,8 @@ private:
     StatusInterface * statusInterface;
 
     //Control variables
-    std::queue<S3TP_PACKET *> controlQueue; //High priority queue
-
-    //Ack variables
-    bool scheduledAck;
-    uint16_t expectedSequence;
+    std::queue<std::shared_ptr<S3TP_PACKET>> controlQueue; //High priority queue
+    bool isSetup;
 
     //Connection manager
     std::shared_ptr<ConnectionManager> connectionManager;
@@ -85,11 +78,9 @@ private:
     int retransmissionCount;
 
     void txRoutine();
-    void sendAcknowledgement();
     void retransmitPackets();
-    void _sendDataPacket(S3TP_PACKET *pkt);
-    void _sendControlPacket(S3TP_PACKET *pkt);
-    void _timedWait();
+    void _sendRegularPacket(std::shared_ptr<S3TP_PACKET> pkt);
+    void _sendControlPacket(std::shared_ptr<S3TP_PACKET> pkt);
 
     //Internal methods for accessing channels (do not use locking)
     bool _channelsAvailable();

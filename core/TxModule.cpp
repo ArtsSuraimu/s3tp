@@ -9,8 +9,6 @@ TxModule::TxModule() {
     state = WAITING;
     active = false;
     retransmissionRequired = false;
-    scheduledAck = false;
-    expectedSequence = 0;
 
     //Timer setup
     elapsedTime = 0;
@@ -31,21 +29,7 @@ void TxModule::reset() {
     txMutex.lock();
     state = WAITING;
     retransmissionRequired = false;
-    scheduledAck = false;
-    expectedSequence = 0;
     txMutex.unlock();
-}
-
-void TxModule::sendAcknowledgement() {
-    /*S3TP_HEADER * hdr = ackPacket.getHeader();
-    hdr->ack = expectedSequence;
-
-    bool arq = S3TP_ARQ;
-    LOG_DEBUG(std::string("TX: ----------- Empty Ack Packet with sequence "
-                          + std::to_string((int)expectedSequence) +" sent -----------"));
-    linkInterface->sendFrame(arq, ackPacket.channel, ackPacket.packet, ackPacket.getLength());
-    //TODO: check if channel is available
-     */
 }
 
 void TxModule::setStatusInterface(StatusInterface * statusInterface) {
@@ -56,7 +40,7 @@ void TxModule::setStatusInterface(StatusInterface * statusInterface) {
 
 //Private methods
 void TxModule::txRoutine() {
-    S3TP_PACKET * packet;
+    std::shared_ptr<S3TP_PACKET> packet;
 
     std::unique_lock<std::mutex> lock(txMutex);
     start = std::chrono::system_clock::now();
@@ -173,6 +157,7 @@ void TxModule::txRoutine() {
     //Thread will die on its own
 }
 
+/*
 void TxModule::_timedWait() {
     //Update time to wait
     now = std::chrono::system_clock::now();
@@ -193,18 +178,10 @@ void TxModule::_timedWait() {
     now = std::chrono::system_clock::now();
     difference = std::chrono::duration_cast<std::chrono::seconds>(now - start);
     elapsedTime = difference.count();
-}
+}*/
 
-void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
+void TxModule::_sendRegularPacket(std::shared_ptr<S3TP_PACKET> pkt) {
     S3TP_HEADER * hdr = pkt->getHeader();
-
-    //Acks can be sent in piggybacking, only inside non ctrl packets
-    if (scheduledAck && !(hdr->getFlags() & FLAG_CTRL)) {
-        hdr->setAck(true);
-        //TODO: proper acks
-        hdr->ack = expectedSequence;
-        scheduledAck = false;
-    }
 
     txMutex.unlock();
 
@@ -235,7 +212,7 @@ void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
     txMutex.lock();
 }
 
-void TxModule::_sendControlPacket(S3TP_PACKET *pkt) {
+void TxModule::_sendControlPacket(std::shared_ptr<S3TP_PACKET> pkt) {
     txMutex.unlock();
 
     /*LOG_DEBUG(std::string("[TX]: Control Packet sent to Link Layer -> seq: "
@@ -247,7 +224,6 @@ void TxModule::_sendControlPacket(S3TP_PACKET *pkt) {
         //Blacklisting channel
         txMutex.lock();
         _setChannelAvailable(pkt->channel, false);
-        //TODO: make this better somehow
         retransmissionRequired = true;
     } else {
         txMutex.lock();
@@ -262,40 +238,11 @@ void TxModule::_sendControlPacket(S3TP_PACKET *pkt) {
  * @param ackSequence  The next expected sequence, to be sent to the receiver
  * @param control  Flag indicating whether the ack is for a control message or not
  */
-void TxModule::scheduleAcknowledgement(uint16_t ackSequence) {
-    txMutex.lock();
-    //TODO: handle control ack?!
-    scheduledAck = true;
-    expectedSequence = ackSequence;
-    //Notifying routine thread that a new ack message needs to be sent out
-    txCond.notify_all();
-    txMutex.unlock();
-}
 
 /**
  * Need to perform a hard reset of the protocol status.
  * After reset request is sent out, the worker thread waits until it receives an acknowledgement.
  */
-void TxModule::scheduleReset(bool ack, uint16_t ackSequence) {
-    //TODO: reimplement logic
-    S3TP_CONTROL control;
-    //control.type = CONTROL_TYPE::RESET;
-    S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
-    packet->channel = DEFAULT_RESERVED_CHANNEL;
-    packet->options = S3TP_ARQ;
-    S3TP_HEADER * hdr = packet->getHeader();
-    hdr->seq = 0;
-    hdr->srcPort = 0;
-    hdr->destPort = 0;
-    hdr->setAck(ack);
-    hdr->setCtrl(true);
-    hdr->ack = ackSequence;
-
-    txMutex.lock();
-    controlQueue.push(packet);
-    txMutex.unlock();
-    LOG_DEBUG("TX: Scheduled RESET Packet");
-}
 
 /**
  * Tells the other S3TP endpoint (if any), that this module has just been started and therefore
@@ -307,25 +254,6 @@ void TxModule::scheduleReset(bool ack, uint16_t ackSequence) {
  *
  * @param ack  An ack flag to be set, in case we need to acknowledge a received setup packet (3-way handshake).
  */
-void TxModule::scheduleSetup(bool ack, uint16_t ackSequence) {
-    S3TP_CONTROL control;
-    control.opcode = CONTROL_SETUP;
-    S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
-    packet->channel = DEFAULT_RESERVED_CHANNEL;
-    packet->options = S3TP_ARQ;
-    S3TP_HEADER * hdr = packet->getHeader();
-    hdr->seq = 0;
-    hdr->srcPort = 0;
-    hdr->setAck(ack);
-    hdr->setCtrl(true);
-    hdr->ack = ackSequence;
-
-    txMutex.lock();
-    controlQueue.push(packet);
-    txCond.notify_all();
-    txMutex.unlock();
-    LOG_DEBUG("TX: Scheduled SETUP Packet");
-}
 
 /**
  * Send out a synchronization packet, used for telling the other endpoint that a new connection
@@ -335,44 +263,12 @@ void TxModule::scheduleSetup(bool ack, uint16_t ackSequence) {
  *
  * @param port  The port that was just opened
  */
-void TxModule::scheduleSync(uint8_t port, uint8_t channel, uint8_t options, bool ack, uint16_t ackSequence) {
-    S3TP_CONTROL control;
-    //TODO: reimplement
-    //control.type = CONTROL_TYPE::SYNC;
-    S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
-    packet->channel = channel;
-    packet->options = options;
-    S3TP_HEADER * hdr = packet->getHeader();
-    hdr->setAck(ack);
-    hdr->setCtrl(true);
-    hdr->ack = ackSequence;
-    hdr->srcPort = port;
-
-    enqueuePacket(packet, 0, false, channel, options);
-    LOG_DEBUG(std::string("TX: Scheduled SYNC Packet for port " + std::to_string((int)port)));
-}
 
 /**
  * Send out a finalization packet, used for telling the other endpoint that an existing
  * connection is being shutdown.
  * @param port  The port that was just closed
  */
-void TxModule::scheduleFin(uint8_t port, uint8_t channel, uint8_t options, bool ack, uint16_t ackSequence) {
-    S3TP_CONTROL control;
-    //TODO: reimplement
-    //control.type = CONTROL_TYPE::FIN;
-    S3TP_PACKET * packet = new S3TP_PACKET((char *)&control, sizeof(S3TP_CONTROL));
-    packet->channel = channel;
-    packet->options = options;
-    S3TP_HEADER * hdr = packet->getHeader();
-    hdr->setAck(ack);
-    hdr->setCtrl(true);
-    hdr->ack = ackSequence;
-    hdr->srcPort = port;
-
-    enqueuePacket(packet, 0, false, channel, options);
-    LOG_DEBUG(std::string("TX: Scheduled FIN Packet for port " + std::to_string((int)port)));
-}
 
 /**
  * Notify TX that an ack for the passed sequence number was received,
@@ -380,35 +276,6 @@ void TxModule::scheduleFin(uint8_t port, uint8_t channel, uint8_t options, bool 
  *
  * @param ackSequence  The acknowledged sequence number (received previously)
  */
-void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
-    S3TP_PACKET * pkt;
-    uint16_t ackRelativeSeq = 0, currentSeq = 0;
-
-    txMutex.lock();
-
-    /*if (ackRelativeSeq > 0 && ackRelativeSeq < MAX_TRANSMISSION_WINDOW) {
-        //Clean output safe queue
-        while (!safeQueue.empty()) {
-            pkt = safeQueue.front();
-            currentSeq = pkt->getHeader()->seq - lastAcknowledgedSequence;
-            if (currentSeq < ackRelativeSeq) {
-                safeQueue.pop_front();
-                delete pkt;
-            } else {
-                break;
-            }
-        }
-        retransmissionRequired = false;
-        retransmissionCount = 0;
-        lastAcknowledgedSequence = ackSequence;
-    } else if (ackSequence == lastAcknowledgedSequence) {
-        //We received the same ack several times. Some packets got dropped by the receiver therefore.
-        retransmissionRequired = true;
-    }*/
-
-    txCond.notify_all();
-    txMutex.unlock();
-}
 
 /*
  * Routine section
