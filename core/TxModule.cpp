@@ -7,30 +7,15 @@
 //Ctor
 TxModule::TxModule() {
     state = WAITING;
-    global_seq_num = 0;
-    sendingFragments = false;
     active = false;
     retransmissionRequired = false;
     scheduledAck = false;
-    currentPort = 0;
-    lastAcknowledgedSequence = 0;
     expectedSequence = 0;
-
-    //Setup prototype ack packet
-    ackPacket.options = S3TP_ARQ;
-    ackPacket.channel = DEFAULT_RESERVED_CHANNEL;
-    S3TP_HEADER * hdr = ackPacket.getHeader();
-    hdr->srcPort = 0;
-    hdr->destPort = 0;
-    hdr->seq = 0;
-    hdr->setAck(true);
-    hdr->unsetMoreFragments();
 
     //Timer setup
     elapsedTime = 0;
     retransmissionCount = 0;
 
-    outBuffer = new Buffer(this);
     LOG_DEBUG("Created Tx Module");
 }
 
@@ -38,7 +23,6 @@ TxModule::TxModule() {
 TxModule::~TxModule() {
     txMutex.lock();
     state = WAITING;
-    delete outBuffer;
     txMutex.unlock();
     LOG_DEBUG("Destroyed Tx Module");
 }
@@ -46,21 +30,14 @@ TxModule::~TxModule() {
 void TxModule::reset() {
     txMutex.lock();
     state = WAITING;
-    global_seq_num = 0;
-    sendingFragments = false;
     retransmissionRequired = false;
     scheduledAck = false;
-    currentPort = 0;
-    lastAcknowledgedSequence = 0;
     expectedSequence = 0;
-    port_sequence.clear();
-    to_consume_port_seq.clear();
-    outBuffer->clear();
     txMutex.unlock();
 }
 
 void TxModule::sendAcknowledgement() {
-    S3TP_HEADER * hdr = ackPacket.getHeader();
+    /*S3TP_HEADER * hdr = ackPacket.getHeader();
     hdr->ack = expectedSequence;
 
     bool arq = S3TP_ARQ;
@@ -68,6 +45,7 @@ void TxModule::sendAcknowledgement() {
                           + std::to_string((int)expectedSequence) +" sent -----------"));
     linkInterface->sendFrame(arq, ackPacket.channel, ackPacket.packet, ackPacket.getLength());
     //TODO: check if channel is available
+     */
 }
 
 void TxModule::setStatusInterface(StatusInterface * statusInterface) {
@@ -91,7 +69,7 @@ void TxModule::txRoutine() {
         }
 
         // Checking if transmission window size was reached
-        if (safeQueue.size() == MAX_TRANSMISSION_WINDOW) {
+        /*if (safeQueue.size() == MAX_TRANSMISSION_WINDOW) {
             //Maximum size of window reached, need to wait for acks
             state = BLOCKED;
             while (safeQueue.size() == MAX_TRANSMISSION_WINDOW) {
@@ -105,7 +83,7 @@ void TxModule::txRoutine() {
                 break;
             }
             continue;
-        }
+        }*/
 
         /* PRIORITY 1
          * Packets need to be retransmitted.
@@ -124,7 +102,7 @@ void TxModule::txRoutine() {
         /* PRIORITY 2
          * Fragmented messages in queue have priority over other messages,
          * as their shared global sequence must not be overridden (messages cannot be split up) */
-        if (sendingFragments) {
+        /*if (sendingFragments) {
             packet = outBuffer->getNextPacket(currentPort);
             if (packet == NULL) {
                 //Channels are currently blocked and packets cannot be sent
@@ -137,7 +115,7 @@ void TxModule::txRoutine() {
             //Updating time where we sent the last packet
             start = std::chrono::system_clock::now();
             continue;
-        }
+        }*/
 
         /* PRIORITY 3
          * Control messages are sent before normal messages. */
@@ -157,7 +135,7 @@ void TxModule::txRoutine() {
         /* PRIORITY 4
          * Attempt to send out normal data. These normal messages may
          * retain acknowledgements, which are sent back in piggybacking */
-        if (outBuffer->packetsAvailable()) {
+        /*if (outBuffer->packetsAvailable()) {
             packet = outBuffer->getNextAvailablePacket();
             if (packet == NULL) {
                 //Channels are currently blocked and packets cannot be sent
@@ -190,7 +168,7 @@ void TxModule::txRoutine() {
                 }
             }
             continue;
-        }
+        }*/
     }
     //Thread will die on its own
 }
@@ -219,14 +197,6 @@ void TxModule::_timedWait() {
 
 void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
     S3TP_HEADER * hdr = pkt->getHeader();
-    sendingFragments = hdr->moreFragments();
-
-    //TODO: set properly and update to_consume_seq inside buffer
-    hdr->seq = global_seq_num;
-    if (!hdr->moreFragments()) {
-        //Need to increase the current global sequence
-        global_seq_num++;
-    }
 
     //Acks can be sent in piggybacking, only inside non ctrl packets
     if (scheduledAck && !(hdr->getFlags() & FLAG_CTRL)) {
@@ -235,9 +205,6 @@ void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
         hdr->ack = expectedSequence;
         scheduledAck = false;
     }
-
-    //Saving packet inside history queue
-    safeQueue.push_back(pkt);
 
     txMutex.unlock();
 
@@ -260,24 +227,19 @@ void TxModule::_sendDataPacket(S3TP_PACKET *pkt) {
     //Since a packet was just popped from the buffer, the queue is definitely available
 
     //TODO: use correct port
-    if (outBuffer->getSizeOfQueue(hdr->srcPort) + 1 == MAX_QUEUE_SIZE
+    /*if (outBuffer->getSizeOfQueue(hdr->srcPort) + 1 == MAX_QUEUE_SIZE
         && statusInterface != nullptr) {
         statusInterface->onOutputQueueAvailable(hdr->srcPort);
-    }
+    }*/
 
     txMutex.lock();
 }
 
 void TxModule::_sendControlPacket(S3TP_PACKET *pkt) {
-    S3TP_HEADER * hdr = pkt->getHeader();
-    //TODO: use correct sequence
-    hdr->seq = global_seq_num++;
-
-    safeQueue.push_back(pkt);
     txMutex.unlock();
 
-    LOG_DEBUG(std::string("[TX]: Control Packet sent to Link Layer -> seq: "
-                          + std::to_string((int)hdr->seq)));
+    /*LOG_DEBUG(std::string("[TX]: Control Packet sent to Link Layer -> seq: "
+                          + std::to_string((int)hdr->seq)));*/
 
     bool arq = pkt->options & S3TP_ARQ;
 
@@ -424,14 +386,7 @@ void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
 
     txMutex.lock();
 
-    if (safeQueue.empty()) {
-        //Received a spurious (probably an older ACK coming in. Ignore it). Out queue is empty anyway.
-        txMutex.unlock();
-        return;
-    }
-
-    ackRelativeSeq = ackSequence - lastAcknowledgedSequence;
-    if (ackRelativeSeq > 0 && ackRelativeSeq < MAX_TRANSMISSION_WINDOW) {
+    /*if (ackRelativeSeq > 0 && ackRelativeSeq < MAX_TRANSMISSION_WINDOW) {
         //Clean output safe queue
         while (!safeQueue.empty()) {
             pkt = safeQueue.front();
@@ -449,7 +404,7 @@ void TxModule::notifyAcknowledgement(uint16_t ackSequence) {
     } else if (ackSequence == lastAcknowledgedSequence) {
         //We received the same ack several times. Some packets got dropped by the receiver therefore.
         retransmissionRequired = true;
-    }
+    }*/
 
     txCond.notify_all();
     txMutex.unlock();
@@ -464,7 +419,7 @@ void TxModule::retransmitPackets() {
 
     LOG_DEBUG("TX: Starting retransmission of lost packets");
 
-    for (auto const& pkt: safeQueue) {
+    /*for (auto const& pkt: safeQueue) {
         hdr = pkt->getHeader();
         hdr->setAck(false);
         relativePktSeq = hdr->seq - lastAcknowledgedSequence;
@@ -491,13 +446,14 @@ void TxModule::retransmitPackets() {
                 continue;
             }
         }
-    }
+    }*/
 }
 
 //Public methods
-void TxModule::startRoutine(Transceiver::LinkInterface * spi_if) {
+void TxModule::startRoutine(Transceiver::LinkInterface * spi_if, std::shared_ptr<ConnectionManager> connectionManager) {
     txMutex.lock();
     linkInterface = spi_if;
+    this->connectionManager = connectionManager;
     active = true;
     txThread = std::thread(&TxModule::txRoutine, this);
     txMutex.unlock();
@@ -524,17 +480,18 @@ TxModule::STATE TxModule::getCurrentState() {
 }
 
 bool TxModule::isQueueAvailable(uint8_t port, uint8_t no_packets) {
-    return outBuffer->getSizeOfQueue(port) + no_packets <= MAX_QUEUE_SIZE;
+    //return outBuffer->getSizeOfQueue(port) + no_packets <= MAX_QUEUE_SIZE;
+    return false;
 }
 
 void TxModule::setChannelAvailable(uint8_t channel, bool available) {
     txMutex.lock();
     if (available) {
-        channel_blacklist.erase(channel);
+        channelBlacklist.erase(channel);
         LOG_DEBUG(std::string("Whitelisted channel " + std::to_string((int)channel)));
         txCond.notify_all();
     } else {
-        channel_blacklist.insert(channel);
+        channelBlacklist.insert(channel);
         LOG_DEBUG(std::string("Blacklisted channel " + std::to_string((int)channel)));
     }
     txMutex.unlock();
@@ -543,7 +500,7 @@ void TxModule::setChannelAvailable(uint8_t channel, bool available) {
 bool TxModule::isChannelAvailable(uint8_t channel) {
     txMutex.lock();
     //result = channel is not in blacklist
-    bool result = channel_blacklist.find(channel) == channel_blacklist.end();
+    bool result = channelBlacklist.find(channel) == channelBlacklist.end();
     txMutex.unlock();
     return result;
 }
@@ -552,22 +509,22 @@ bool TxModule::isChannelAvailable(uint8_t channel) {
  * Internal channel utility methods
  */
 bool TxModule::_channelsAvailable() {
-    return channel_blacklist.size() < S3TP_VIRTUAL_CHANNELS;
+    return channelBlacklist.size() < S3TP_VIRTUAL_CHANNELS;
 }
 
 void TxModule::_setChannelAvailable(uint8_t channel, bool available) {
     if (available) {
-        channel_blacklist.erase(channel);
+        channelBlacklist.erase(channel);
         LOG_DEBUG(std::string("Whitelisted channel " + std::to_string((int)channel)));
         txCond.notify_all();
     } else {
-        channel_blacklist.insert(channel);
+        channelBlacklist.insert(channel);
         LOG_DEBUG(std::string("Blacklisted channel " + std::to_string((int)channel)));
     }
 }
 
 bool TxModule::_isChannelAvailable(uint8_t channel) {
-    return channel_blacklist.find(channel) == channel_blacklist.end();
+    return channelBlacklist.find(channel) == channelBlacklist.end();
 }
 
 void TxModule::notifyLinkAvailability(bool available) {
@@ -605,10 +562,9 @@ int TxModule::enqueuePacket(S3TP_PACKET * packet,
     }
     //Increasing port sequence
     int port = hdr->srcPort;
-    hdr->seq = port_sequence[port]++;
+    //hdr->seq = port_sequence[port]++;
     txMutex.unlock();
 
-    outBuffer->write(packet);
     txCond.notify_all();
 
     return CODE_SUCCESS;
@@ -619,7 +575,7 @@ int TxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     uint8_t seq1, seq2, offset;
     txMutex.lock();
 
-    offset = to_consume_port_seq[element1->getHeader()->srcPort];
+    //offset = to_consume_port_seq[element1->getHeader()->srcPort];
     seq1 = element1->getHeader()->seq - offset;
     seq2 = element2->getHeader()->seq - offset;
     if (seq1 < seq2) {

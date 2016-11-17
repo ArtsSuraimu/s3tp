@@ -6,9 +6,9 @@
 #define S3TP_TXMODULE_H
 
 #include "Constants.h"
-#include "Buffer.h"
 #include "utilities.h"
 #include "StatusInterface.h"
+#include "ConnectionManager.h"
 #include <map>
 #include <trctrl/LinkInterface.h>
 #include <set>
@@ -37,7 +37,7 @@ public:
     ~TxModule();
 
     STATE getCurrentState();
-    void startRoutine(Transceiver::LinkInterface * spi_if);
+    void startRoutine(Transceiver::LinkInterface * spi_if, std::shared_ptr<ConnectionManager> connectionManager);
     void stopRoutine();
     int enqueuePacket(S3TP_PACKET * packet, uint8_t frag_no, bool more_fragments, uint8_t spi_channel, uint8_t options);
     void reset();
@@ -62,9 +62,7 @@ private:
     std::thread txThread;
     std::mutex txMutex;
     std::condition_variable txCond;
-    std::set<uint8_t> channel_blacklist;
-    bool sendingFragments;
-    uint8_t currentPort;
+    std::set<uint8_t> channelBlacklist;
     Transceiver::LinkInterface * linkInterface;
     StatusInterface * statusInterface;
 
@@ -74,22 +72,14 @@ private:
     //Ack variables
     bool scheduledAck;
     uint16_t expectedSequence;
-    S3TP_PACKET ackPacket = S3TP_PACKET(nullptr, 0); //Prototype ack packet
 
-    //Buffer and port sequences
-    std::map<uint8_t, uint8_t> to_consume_port_seq;
-    std::map<uint8_t, uint8_t> port_sequence;
-    uint8_t global_seq_num;
-    Buffer * outBuffer;
+    //Connection manager
+    std::shared_ptr<ConnectionManager> connectionManager;
 
     //Safe output buffer
-    uint16_t lastAcknowledgedSequence;
     bool retransmissionRequired;
-    std::deque<S3TP_PACKET *> safeQueue;
 
     //Transmission control timer
-    struct timespec ackTimer;
-    struct timespec syncTimer;
     std::chrono::time_point<std::chrono::system_clock> start, now;
     double elapsedTime;
     int retransmissionCount;
