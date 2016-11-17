@@ -38,7 +38,6 @@ Connection::Connection(S3TP_PACKET * synPacket) {
 }
 
 Connection::~Connection() {
-
     connectionMutex.lock();
     currentState = DISCONNECTED;
     connectionMutex.unlock();
@@ -64,6 +63,13 @@ Connection::~Connection() {
 /*
  * Private Methods
  */
+void Connection::updateState(STATE newState) {
+    currentState = newState;
+    if (statusInterface != nullptr) {
+        statusInterface->onConnectionStatusChanged(*this);
+    }
+}
+
 void Connection::_syn() {
     S3TP_PACKET * pkt = new S3TP_PACKET(emptyPdu, 0);
 
@@ -79,7 +85,7 @@ void Connection::_syn() {
 
     //TODO: policy actor
     outBuffer.push(pkt, nullptr);
-    currentState = CONNECTING;
+    updateState(CONNECTING);
 }
 
 void Connection::_syncAck() {
@@ -98,7 +104,7 @@ void Connection::_syncAck() {
 
     //TODO: policy actor
     outBuffer.push(pkt, nullptr);
-    currentState = CONNECTING;
+    updateState(CONNECTING);
 }
 
 void Connection::_fin() {
@@ -116,7 +122,7 @@ void Connection::_fin() {
 
     //TODO: policy actor
     outBuffer.push(pkt, nullptr);
-    currentState = DISCONNECTING;
+    updateState(DISCONNECTING);
 }
 
 void Connection::_finAck(uint8_t sequence) {
@@ -135,9 +141,34 @@ void Connection::_finAck(uint8_t sequence) {
 
     //TODO: policy actor
     outBuffer.push(pkt, nullptr);
-    currentState = DISCONNECTING;
+    updateState(DISCONNECTING);
 }
 
+void Connection::_onFinAck(uint8_t sequence) {
+    S3TP_PACKET * pkt = new S3TP_PACKET(emptyPdu, 0);
+
+    pkt->options = options;
+    pkt->channel = virtualChannel;
+
+    S3TP_HEADER * hdr = pkt->getHeader();
+    hdr->srcPort = srcPort;
+    hdr->destPort = dstPort;
+    hdr->ack = sequence;
+    hdr->seq = currentOutSequence++;
+    hdr->setAck(true);
+
+    if (statusInterface != nullptr) {
+        statusInterface->onConnectionOutOfBandRequested(pkt);
+    }
+}
+
+void Connection::_handleAcknowledgement(uint8_t sequence) {
+    //TODO: implement
+}
+
+/*
+ * PUBLIC METHODS
+ */
 STATE Connection::getCurrentState() {
     return currentState;
 }
@@ -265,33 +296,111 @@ int Connection::sendOutPacket(S3TP_PACKET * pkt) {
 
     connectionMutex.unlock();
 
-    return CODE_BUFFER_WRITE_OK;
+    return CODE_OK;
 }
 
 int Connection::receiveInPacket(S3TP_PACKET * pkt) {
     connectionMutex.lock();
 
-    if (currentState != CONNECTED) {
+    if (currentState != CONNECTED && currentState != CONNECTING && currentState != DISCONNECTING) {
         connectionMutex.unlock();
+        delete pkt;
         return CODE_CONNECTION_ERROR;
     } else if (inBuffer.getSize() + pkt->getLength() > MAX_QUEUE_SIZE) {
         //TODO: reset the connection? Drop packet?
         connectionMutex.unlock();
+        delete pkt;
         return CODE_BUFFER_FULL;
     }
 
     //TODO: check message flags
+    S3TP_HEADER * hdr = pkt->getHeader();
+    uint8_t flags = hdr->getFlags();
+    if (flags & FLAG_SYN) {
+        /*
+         * SYN LOGIC
+         */
+        if (flags & FLAG_ACK) {
+            //Received a SYN ACK packet
+            if (currentState != CONNECTING) {
+                connectionMutex.unlock();
+                delete pkt;
+                return CODE_INVALID_PACKET;
+            }
+            _handleAcknowledgement(hdr->ack);
+            scheduleAcknowledgement(hdr->seq);
+            expectedInSequence += 1;
+            updateState(CONNECTED);
+            connectionMutex.unlock();
+            delete pkt;
+            return CODE_OK;
+        } else if (flags & FLAG_RST) {
+            //Attempted to connect but received a RST. Port is not open on other side
+            updateState(DISCONNECTED);
+            connectionMutex.unlock();
+            delete pkt;
+            return CODE_OK;
+        } else {
+            connectionMutex.unlock();
+            delete pkt;
+            return CODE_INVALID_PACKET;
+        }
+    } else if (flags & FLAG_FIN) {
+        /*
+         * FIN LOGIC
+         */
+        if (flags & FLAG_ACK) {
+            //Received a FIN ACK message
+            if (currentState != DISCONNECTING) {
+                connectionMutex.unlock();
+                delete pkt;
+                return CODE_INVALID_PACKET;
+            } else {
+                _handleAcknowledgement(hdr->ack);
+                _onFinAck(hdr->seq);
+                updateState(DISCONNECTED);
+                delete pkt;
+                return CODE_OK;
+            }
+        } else {
+            //Receiving a FIN packet
+            _finAck(hdr->seq);
+            connectionMutex.unlock();
+            delete pkt;
+            return CODE_OK;
+        }
+    } else if (flags & FLAG_RST) {
+        /*
+         * RST LOGIC
+         */
+        updateState(DISCONNECTED);
+        connectionMutex.unlock();
+        delete pkt;
+        return CODE_OK;
+    } else if (flags & FLAG_ACK) {
+        /*
+         * ACK LOGIC
+         */
+        _handleAcknowledgement(hdr->ack);
+    }
 
     //TODO: use policy actor
     inBuffer.push(pkt, nullptr);
 
     connectionMutex.unlock();
 
-    return CODE_BUFFER_WRITE_OK;
+    return CODE_OK;
 }
 
 void Connection::reset() {
-    //TODO: implement
+    connectionMutex.lock();
+
+    //TODO: implement logic properly
+    currentOutSequence = 0;
+    expectedInSequence = 0;
+    updateState(RESETTING);
+
+    connectionMutex.unlock();
 }
 
 void Connection::close() {

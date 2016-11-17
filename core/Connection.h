@@ -7,11 +7,13 @@
 
 #include "S3tpShared.h"
 #include "PriorityQueue.h"
+#include "ConnectionStatusInterface.h"
 #include <queue>
 
-#define CODE_BUFFER_WRITE_OK 0
+#define CODE_OK 0
 #define CODE_BUFFER_FULL -1
 #define CODE_CONNECTION_ERROR -2
+#define CODE_INVALID_PACKET -3
 
 class Connection {
 private:
@@ -27,11 +29,15 @@ private:
     STATE currentState;
     std::queue<uint8_t> scheduledAcknowledgements;
     static char emptyPdu[0];
+    ConnectionStatusInterface * statusInterface;
 
     void _syn();
     void _syncAck();
     void _fin();
     void _finAck(uint8_t sequence);
+    void _onFinAck(uint8_t sequence);
+    void _handleAcknowledgement(uint8_t sequence);
+    void updateState(STATE newState);
 public:
     enum STATE {
         CONNECTING,
