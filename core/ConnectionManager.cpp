@@ -68,3 +68,46 @@ int ConnectionManager::openConnectionsCount() {
 
     return openConnectionsCount;
 }
+
+/*
+ * Listener setters
+ */
+void ConnectionManager::setInPacketListener(InPacketListener * listener) {
+    this->inListener = listener;
+}
+
+void ConnectionManager::setOutPacketListener(OutPacketListener * listener) {
+    this->outListener = listener;
+}
+
+/*
+ * Connection Listener callbacks
+ */
+void ConnectionManager::onConnectionStatusChanged(Connection& connection) {
+    if (connection.getCurrentState() == Connection::DISCONNECTED) {
+        connectionsMutex.lock();
+        openConnections.erase(connection.getSourcePort());
+        connectionsMutex.unlock();
+    }
+    //TODO: other status to handle?
+}
+
+void ConnectionManager::onConnectionOutOfBandRequested(S3TP_PACKET * pkt) {
+
+}
+
+void ConnectionManager::onConnectionError(Connection& connection, std::string error) {
+
+}
+
+void ConnectionManager::onNewOutPacket(Connection& connection) {
+    if (outListener != nullptr) {
+        outListener->onNewOutPacket(connection);
+    }
+}
+
+void ConnectionManager::onNewInPacket(Connection& connection) {
+    if (inListener != nullptr) {
+        inListener->onNewInPacket(connection);
+    }
+}
