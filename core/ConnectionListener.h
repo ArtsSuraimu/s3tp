@@ -11,11 +11,11 @@ class Connection;
 
 class ConnectionListener {
 public:
-    void onConnectionStatusChanged(Connection& connection);
-    void onConnectionOutOfBandRequested(S3TP_PACKET * pkt);
-    void onConnectionError(Connection& connection, std::string error);
-    void onNewOutPacket(Connection& connection);
-    void onNewInPacket(Connection& connection);
+    virtual void onConnectionStatusChanged(Connection& connection) = 0;
+    virtual void onConnectionOutOfBandRequested(S3TP_PACKET * pkt) = 0;
+    virtual void onConnectionError(Connection& connection, std::string error) = 0;
+    virtual void onNewOutPacket(Connection& connection) = 0;
+    virtual void onNewInPacket(Connection& connection) = 0;
 };
 
 #endif //S3TP_CONNECTIONSTATUSINTERFACE_H
