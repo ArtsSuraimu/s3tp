@@ -6,7 +6,7 @@
 #define S3TP_CONNECTIONMANGER_H
 
 #include "Connection.h"
-#include "ConnectionStatusInterface.h"
+#include "ConnectionListener.h"
 #include <map>
 
 class ConnectionManager {

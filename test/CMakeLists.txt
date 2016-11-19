@@ -36,7 +36,7 @@ set(S3TP_CORE_FILES
         ../core/ClientInterface.h
         ../core/ConnectionManager.h
         ../core/ConnectionManager.cpp
-        ../core/ConnectionStatusInterface.h
+        ../core/ConnectionListener.h
         ../core/Connection.h
         ../core/Connection.cpp
         ../core/TransportInterface.h

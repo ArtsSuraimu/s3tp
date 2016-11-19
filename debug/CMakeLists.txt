@@ -18,7 +18,7 @@ set(DEBUG_CORE_FILES
         ../core/Constants.h
         ../core/ConnectionManager.h
         ../core/ConnectionManager.cpp
-        ../core/ConnectionStatusInterface.h
+        ../core/ConnectionListener.h
         ../core/Connection.h
         ../core/Connection.cpp
         ../core/PriorityQueue.h

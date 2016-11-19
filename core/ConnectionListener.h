@@ -9,11 +9,13 @@
 
 class Connection;
 
-class ConnectionStatusInterface {
+class ConnectionListener {
 public:
     void onConnectionStatusChanged(Connection& connection);
     void onConnectionOutOfBandRequested(S3TP_PACKET * pkt);
     void onConnectionError(Connection& connection, std::string error);
+    void onNewOutPacket(Connection& connection);
+    void onNewInPacket(Connection& connection);
 };
 
 #endif //S3TP_CONNECTIONSTATUSINTERFACE_H

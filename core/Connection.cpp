@@ -15,6 +15,7 @@ Connection::Connection(uint8_t srcPort, uint8_t dstPort, uint8_t virtualChannel,
     this->options = options;
     this->currentOutSequence = 0;
     this->expectedInSequence = 0;
+    this->needsRetransmission = false;
 
     connectionMutex.lock();
     _syn();
@@ -32,6 +33,7 @@ Connection::Connection(S3TP_PACKET * synPacket) {
     this->expectedInSequence = hdr->seq;
     this->expectedInSequence += 1;
     this->currentOutSequence = 0;
+    this->needsRetransmission = false;
 
     _syncAck();
     connectionMutex.unlock();
@@ -163,7 +165,14 @@ void Connection::_onFinAck(uint8_t sequence) {
 }
 
 void Connection::_handleAcknowledgement(uint8_t sequence) {
-    //TODO: implement
+    std::deque<std::shared_ptr<S3TP_PACKET>>::iterator it = retransmissionQueue.begin();
+    while (it != retransmissionQueue.end()) {
+        if (it->get()->getHeader()->seq == sequence) {
+            retransmissionQueue.erase(it);
+            break;
+        }
+        ++it;
+    }
 }
 
 /*
@@ -182,8 +191,11 @@ bool Connection::outPacketsAvailable() {
 }
 
 bool Connection::inPacketsAvailable() {
-    //TODO: implement
-    return false;
+    inBuffer.lock();
+    bool isAvailable = inBuffer.peek()->getHeader()->seq == expectedInSequence;
+    inBuffer.unlock();
+
+    return isAvailable;
 }
 
 bool Connection::isOutBufferFull() {
@@ -313,7 +325,6 @@ int Connection::receiveInPacket(S3TP_PACKET * pkt) {
         return CODE_BUFFER_FULL;
     }
 
-    //TODO: check message flags
     S3TP_HEADER * hdr = pkt->getHeader();
     uint8_t flags = hdr->getFlags();
     if (flags & FLAG_SYN) {

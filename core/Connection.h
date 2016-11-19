@@ -7,7 +7,7 @@
 
 #include "S3tpShared.h"
 #include "PriorityQueue.h"
-#include "ConnectionStatusInterface.h"
+#include "ConnectionListener.h"
 #include <queue>
 
 #define CODE_OK 0
@@ -29,7 +29,9 @@ private:
     STATE currentState;
     std::queue<uint8_t> scheduledAcknowledgements;
     static char emptyPdu[0];
-    ConnectionStatusInterface * statusInterface;
+    ConnectionListener * statusInterface;
+    std::deque<std::shared_ptr<S3TP_PACKET>> retransmissionQueue;
+    bool needsRetransmission;
 
     void _syn();
     void _syncAck();
