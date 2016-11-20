@@ -11,6 +11,9 @@
 #define FLAG_RST 0x08
 #define FLAG_CTRL 0x16
 
+#define CTRL_SETUP 1
+#define CTRL_SACK 2
+
 #define CONTROL_SETUP 0x01
 
 //Eigth channel is reserved and should not be available for applications to use
