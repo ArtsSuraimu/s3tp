@@ -27,9 +27,11 @@ private:
     PriorityQueue<S3TP_PACKET *> inBuffer;
     std::mutex connectionMutex;
     STATE currentState;
-    std::queue<uint8_t> scheduledAcknowledgements;
+    bool scheduledAcknowledgements [MAX_SEQUENCE_NUMBER];
+    bool needsSelectiveAcknowledgement;
+    uint8_t numberOfScheduledAcknowledgements;
     static char emptyPdu[0];
-    ConnectionListener * statusInterface;
+    ConnectionListener * connectionListener;
     std::deque<std::shared_ptr<S3TP_PACKET>> retransmissionQueue;
     bool needsRetransmission;
 
@@ -38,7 +40,10 @@ private:
     void _fin();
     void _finAck(uint8_t sequence);
     void _onFinAck(uint8_t sequence);
+    void _sack();
     void _handleAcknowledgement(uint8_t sequence);
+    void _scheduleAcknowledgement(uint8_t ackSequence);
+    void _updateCumulativeAcknowledgement(uint8_t sequence);
     void updateState(STATE newState);
 public:
     enum STATE {
@@ -66,8 +71,6 @@ public:
     S3TP_PACKET * getNextOutPacket();
     S3TP_PACKET * peekNextInPacket();
     S3TP_PACKET * getNextInPacket();
-
-    void scheduleAcknowledgement(uint8_t ackSequence);
 
     int sendOutPacket(S3TP_PACKET * pkt);
     int receiveInPacket(S3TP_PACKET * pkt);

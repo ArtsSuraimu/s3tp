@@ -3,6 +3,7 @@
 //
 
 #include "Connection.h"
+#include "utilities.h"
 
 /*
  * CTOR/DTOR
@@ -67,8 +68,8 @@ Connection::~Connection() {
  */
 void Connection::updateState(STATE newState) {
     currentState = newState;
-    if (statusInterface != nullptr) {
-        statusInterface->onConnectionStatusChanged(*this);
+    if (connectionListener != nullptr) {
+        connectionListener->onConnectionStatusChanged(*this);
     }
 }
 
@@ -159,9 +160,56 @@ void Connection::_onFinAck(uint8_t sequence) {
     hdr->seq = currentOutSequence++;
     hdr->setAck(true);
 
-    if (statusInterface != nullptr) {
-        statusInterface->onConnectionOutOfBandRequested(pkt);
+    if (connectionListener != nullptr) {
+        connectionListener->onConnectionOutOfBandRequested(pkt);
     }
+}
+
+void Connection::_sack() {
+    //Computing ranges
+    uint8_t count = 0, i = expectedInSequence;
+    std::vector<uint8_t> ranges;
+    NumericRange currentRange;
+    bool rangeStarted = false;
+    while ((i - expectedInSequence) <= MAX_TRANSMISSION_WINDOW && count < numberOfScheduledAcknowledgements) {
+        if (scheduledAcknowledgements[i]) {
+            if (!rangeStarted) {
+                rangeStarted = true;
+                currentRange.start = i;
+            }
+            currentRange.end = i;
+            scheduledAcknowledgements[i] = false;
+            count += 1;
+        } else if (rangeStarted) {
+            ranges.emplace_back(currentRange.start);
+            ranges.emplace_back(currentRange.end);
+            rangeStarted = false;
+        }
+        i++;
+    }
+    numberOfScheduledAcknowledgements -= count;
+    needsSelectiveAcknowledgement = false;
+
+    //Putting ranges as payload of the control message
+    uint16_t len = sizeof(char) * (ranges.size() + 1);
+    char * pdu = new char[len];
+    uint16_t j = 0;
+    pdu[j++] = CTRL_SACK;
+    for (auto range : ranges) {
+        pdu[j++] = range;
+    }
+    S3TP_PACKET * pkt = new S3TP_PACKET(pdu, len);
+
+    pkt->options = options;
+    pkt->channel = virtualChannel;
+
+    S3TP_HEADER * hdr = pkt->getHeader();
+    hdr->srcPort = srcPort;
+    hdr->destPort = dstPort;
+    hdr->ack = expectedInSequence; //Everything before this sequence was received correctly
+    hdr->seq = currentOutSequence++;
+    hdr->setAck(true);
+    hdr->setCtrl(true); //Special message used for transmitting selective acks
 }
 
 void Connection::_handleAcknowledgement(uint8_t sequence) {
@@ -173,6 +221,41 @@ void Connection::_handleAcknowledgement(uint8_t sequence) {
         }
         ++it;
     }
+}
+
+void Connection::_scheduleAcknowledgement(uint8_t ackSequence) {
+    uint8_t offset = ackSequence - expectedInSequence;
+    if (offset > MAX_TRANSMISSION_WINDOW) {
+        //Old or invalid acknowledgement. Ignore
+        return;
+    }
+    if (scheduledAcknowledgements[ackSequence]) {
+        //TODO: handle double acknowledgement
+    }
+    scheduledAcknowledgements[ackSequence] = true;
+    numberOfScheduledAcknowledgements += 1;
+    _updateCumulativeAcknowledgement(ackSequence);
+}
+
+//TODO: call function correctly upon receiving a message
+void Connection::_updateCumulativeAcknowledgement(uint8_t sequence) {
+    uint8_t i = expectedInSequence;
+    uint8_t count = 0;
+    while ((i - expectedInSequence) <= MAX_TRANSMISSION_WINDOW && count < numberOfScheduledAcknowledgements) {
+        if (scheduledAcknowledgements[i]) {
+            scheduledAcknowledgements[i] = false; //Clearing ack
+            expectedInSequence += 1;
+            i = expectedInSequence;
+            count += 1;
+        } else {
+            needsSelectiveAcknowledgement = true;
+            numberOfScheduledAcknowledgements -= count;
+            return;
+        }
+    }
+    numberOfScheduledAcknowledgements -= count;
+    //If we got so far, it means that all packets were received correctly
+    needsSelectiveAcknowledgement = false;
 }
 
 /*
@@ -295,10 +378,12 @@ int Connection::sendOutPacket(S3TP_PACKET * pkt) {
     hdr->srcPort = srcPort;
     hdr->destPort = dstPort;
     hdr->seq = currentOutSequence++;
-    if (!scheduledAcknowledgements.empty()) {
+    if (needsSelectiveAcknowledgement) {
+        _sack();
+    } else {
+        //Sending cumulative ack by default, even if it is redundant
         hdr->setAck(true);
-        hdr->ack = scheduledAcknowledgements.front();
-        scheduledAcknowledgements.pop();
+        hdr->ack = expectedInSequence;
     }
 
     outBuffer.lock();
@@ -339,7 +424,7 @@ int Connection::receiveInPacket(S3TP_PACKET * pkt) {
                 return CODE_INVALID_PACKET;
             }
             _handleAcknowledgement(hdr->ack);
-            scheduleAcknowledgement(hdr->seq);
+            _scheduleAcknowledgement(hdr->seq);
             expectedInSequence += 1;
             updateState(CONNECTED);
             connectionMutex.unlock();
