@@ -54,6 +54,7 @@ private:
     std::mutex s3tpMutex;
     bool active;
     Transceiver::Backend * transceiver;
+    std::shared_ptr<ConnectionManager> connectionManager = new ConnectionManager();
 
     //Generic methods
     void reset();

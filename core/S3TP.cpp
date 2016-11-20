@@ -56,7 +56,7 @@ int S3TP::init(TRANSCEIVER_CONFIG * config) {
 
     s3tpMutex.lock();
     rx.startModule();
-    tx.startRoutine(rx.link);
+    tx.startRoutine(rx.link, connectionManager);
 
     assemblyThread = std::thread(&S3TP::assemblyRoutine, this);
     LOG_DEBUG(std::string("Assembly Thread: START"));
@@ -153,9 +153,10 @@ int S3TP::sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t l
     packet = new S3TP_PACKET((char *)data, (uint16_t) len);
     packet->channel = channel;
     packet->options = opts;
-    packet->getHeader()->setPort(port);
+    packet->getHeader()->srcPort = port;
 
-    return tx.enqueuePacket(packet, 0, false, channel, opts);
+    return 0;
+    //return tx.enqueuePacket(packet, 0, false, channel, opts);
 }
 
 int S3TP::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts) {
@@ -176,7 +177,7 @@ int S3TP::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len
             //Filling packet payload with max permitted payload
             packet = new S3TP_PACKET(dataPtr, LEN_S3TP_PDU);
         }
-        packet->getHeader()->setPort(port);
+        packet->getHeader()->srcPort = port;
         packet->options = opts;
         packet->channel = channel;
         written += packet->getHeader()->getPduLength();
@@ -186,7 +187,8 @@ int S3TP::fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len
             moreFragments = false;
         }
         //Send to Tx Module
-        status = tx.enqueuePacket(packet, fragment, moreFragments, channel, opts);
+        // = tx.enqueuePacket(packet, fragment, moreFragments, channel, opts);
+        status = 0;
         if (status != CODE_SUCCESS) {
             return status;
         }
@@ -251,12 +253,12 @@ int S3TP::checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t 
         no_packets += 1;
     }
     //Checking if transmission Q can contain the desired amount of packets
-    if (!tx.isQueueAvailable(port, no_packets)) {
+    /*if (!tx.isQueueAvailable(port, no_packets)) {
         return CODE_QUEUE_FULL;
     } else if (!tx.isChannelAvailable(channel)) {
         //Channel is currently broken
         return CODE_CHANNEL_BROKEN;
-    }
+    }*/
     return CODE_SUCCESS;
 }
 
@@ -291,7 +293,7 @@ void S3TP::onApplicationConnected(void *params) {
     //Start setup if first time starting the protocol
     s3tpMutex.lock();
     if (!setupPerformed) {
-        tx.scheduleSetup(false, 0);
+        tx.scheduleInitialSetup();
     }
     s3tpMutex.unlock();
 }
@@ -304,13 +306,13 @@ int S3TP::onApplicationMessage(void * data, size_t len, void * params) {
 void S3TP::onConnectToHost(void *params) {
     Client * cli = (Client *)params;
     //Scheduling 3-way handshake
-    tx.scheduleSync(cli->getAppPort(), cli->getVirtualChannel(), cli->getOptions(), false, 0);
+    //tx.scheduleSync(cli->getAppPort(), cli->getVirtualChannel(), cli->getOptions(), false, 0);
 }
 
 void S3TP::onDisconnectFromHost(void *params) {
     Client * cli = (Client *)params;
     //Scheduling connection teardown
-    tx.scheduleFin(cli->getAppPort(), cli->getVirtualChannel(), cli->getOptions(), false, 0);
+    //tx.scheduleFin(cli->getAppPort(), cli->getVirtualChannel(), cli->getOptions(), false, 0);
 }
 
 /*
@@ -374,7 +376,7 @@ void S3TP::onSetup(bool ack, uint16_t sequenceNumber) {
         // In case we received an ack for sync
         if (setupInitiated) {
             // We were initiator of setup and got an ack. We still need to ack the ack (3-way last step)
-            tx.scheduleSetup(true, sequenceNumber);
+            //tx.scheduleSetup(true, sequenceNumber);
             setupPerformed = true;
             setupInitiated = false;
         } else {
@@ -384,7 +386,7 @@ void S3TP::onSetup(bool ack, uint16_t sequenceNumber) {
     } else {
         // We weren't initiator, we need to send back an ack
         //TODO: check
-        tx.scheduleSetup(true, sequenceNumber);
+        //tx.scheduleSetup(true, sequenceNumber);
         setupPerformed = false;
     }
     s3tpMutex.unlock();
@@ -404,23 +406,23 @@ void S3TP::onReset(bool ack, uint16_t sequenceNumber) {
     } else {
         // Received a force reset. Resetting everything (not rx, that was already resetted), then acknowledging it
         tx.reset();
-        tx.scheduleReset(true, sequenceNumber);
+        //tx.scheduleReset(true, sequenceNumber);
     }
     s3tpMutex.unlock();
 }
 
 void S3TP::onReceivedPacket(uint16_t sequenceNumber) {
     //Send ACK
-    tx.scheduleAcknowledgement(sequenceNumber);
+    //tx.scheduleAcknowledgement(sequenceNumber);
 }
 
 void S3TP::onReceiveWindowFull(uint16_t lastValidSequence) {
-    tx.scheduleAcknowledgement(lastValidSequence);
+    //tx.scheduleAcknowledgement(lastValidSequence);
 }
 
 void S3TP::onAcknowledgement(uint16_t sequenceAck) {
     //Notify TX that an ack was received
-    tx.notifyAcknowledgement(sequenceAck);
+    //tx.notifyAcknowledgement(sequenceAck);
 }
 
 //TODO: implement
@@ -435,12 +437,12 @@ void S3TP::onConnectionRequest(uint8_t port, uint16_t sequenceNumber) {
     }
     rx.openPort(port);
     uint8_t defaultOpts = S3TP_ARQ;
-    tx.scheduleSync(port, cli->getVirtualChannel(), defaultOpts, true, sequenceNumber);
+    //tx.scheduleSync(port, cli->getVirtualChannel(), defaultOpts, true, sequenceNumber);
     clientsMutex.unlock();
 }
 
 void S3TP::onConnectionAccept(uint8_t port, uint16_t sequenceNumber) {
-    tx.scheduleAcknowledgement(sequenceNumber);
+    //tx.scheduleAcknowledgement(sequenceNumber);
     //Notify client that connection is now open
     clientsMutex.lock();
     Client * cli = clients[port];
@@ -451,7 +453,7 @@ void S3TP::onConnectionAccept(uint8_t port, uint16_t sequenceNumber) {
 }
 
 void S3TP::onConnectionClose(uint8_t port, uint16_t sequenceNumber) {
-    tx.scheduleAcknowledgement(sequenceNumber);
+    //tx.scheduleAcknowledgement(sequenceNumber);
     //No 4-way close. We know the connection has been closed and that's it.
     rx.closePort(port);
     //Notify client that connection is now closed
