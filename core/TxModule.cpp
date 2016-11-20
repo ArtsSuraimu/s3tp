@@ -306,6 +306,24 @@ TxModule::STATE TxModule::getCurrentState() {
     return current;
 }
 
+/*
+ * S3TP Control APIs
+ */
+void TxModule::scheduleInitialSetup() {
+    char pdu [1];
+    pdu[0] = CTRL_SETUP;
+    std::shared_ptr<S3TP_PACKET> pkt = new S3TP_PACKET(pdu, sizeof(char) * sizeof(pdu));
+
+    S3TP_HEADER * hdr = pkt->getHeader();
+    hdr->seq = currentControlSequence++;
+    //Ports are not important for this out-of-band packet
+    hdr->srcPort = 0;
+    hdr->destPort = 0;
+    hdr->setCtrl(true);
+
+    controlQueue.push(pkt);
+}
+
 void TxModule::setChannelAvailable(uint8_t channel, bool available) {
     txMutex.lock();
     if (available) {

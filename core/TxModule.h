@@ -44,7 +44,6 @@ public:
 
     //S3TP Control APIs
     void scheduleInitialSetup();
-    void notifyInitialSetup();
 
     //Public channel and link methods
     void notifyLinkAvailability(bool available);
