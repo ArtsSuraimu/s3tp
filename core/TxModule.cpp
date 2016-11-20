@@ -8,7 +8,8 @@
 TxModule::TxModule() {
     state = WAITING;
     active = false;
-    retransmissionRequired = false;
+
+    currentControlSequence = 0;
 
     //Timer setup
     elapsedTime = 0;
@@ -28,7 +29,7 @@ TxModule::~TxModule() {
 void TxModule::reset() {
     txMutex.lock();
     state = WAITING;
-    retransmissionRequired = false;
+    currentControlSequence = 0;
     txMutex.unlock();
 }
 
@@ -40,7 +41,8 @@ void TxModule::setStatusInterface(StatusInterface * statusInterface) {
 
 //Private methods
 void TxModule::txRoutine() {
-    std::shared_ptr<S3TP_PACKET> packet;
+    std::shared_ptr<S3TP_PACKET> pkt;
+    std::shared_ptr<Connection> connection;
 
     std::unique_lock<std::mutex> lock(txMutex);
     start = std::chrono::system_clock::now();
@@ -69,90 +71,80 @@ void TxModule::txRoutine() {
             continue;
         }*/
 
+        state = RUNNING;
+
         /* PRIORITY 1
-         * Packets need to be retransmitted.
-         * Once this starts, all packets will be sent out at once */
-        if (retransmissionRequired) {
-            //TODO: implement retransmission limit and queue flush
-            state = RUNNING;
-            retransmitPackets();
-            retransmissionCount++;
-            retransmissionRequired = false;
-            //Updating time where we sent the last packet
-            start = std::chrono::system_clock::now();
-            continue;
+         * Control packets need to be retransmitted */
+        if (needsControlRetransmission && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
+            if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
+                _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
+            } else {
+                int retransmitted = retransmitControlPackets();
+                if (retransmitted > 0) {
+                    start = std::chrono::system_clock::now();
+                }
+                if (retransmitted == controlRetransmissionQueue.size()) {
+                    needsControlRetransmission = false;
+                }
+                //TODO: adjust logic
+
+                continue;
+            }
         }
 
         /* PRIORITY 2
-         * Fragmented messages in queue have priority over other messages,
-         * as their shared global sequence must not be overridden (messages cannot be split up) */
-        /*if (sendingFragments) {
-            packet = outBuffer->getNextPacket(currentPort);
-            if (packet == NULL) {
-                //Channels are currently blocked and packets cannot be sent
-                state = BLOCKED;
-                txCond.wait(lock);
-                continue;
-            }
-            state = RUNNING;
-            _sendDataPacket(packet);
-            //Updating time where we sent the last packet
-            start = std::chrono::system_clock::now();
-            continue;
-        }*/
-
-        /* PRIORITY 3
-         * Control messages are sent before normal messages. */
+         * Control packets need to be sent */
         if (!controlQueue.empty() && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
             if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
                 _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
             } else {
-                packet = controlQueue.front();
-                _sendControlPacket(packet);
-                controlQueue.pop();
-                //Updating time where we sent the last packet
-                start = std::chrono::system_clock::now();
-            }
-            continue;
-        }
-
-        /* PRIORITY 4
-         * Attempt to send out normal data. These normal messages may
-         * retain acknowledgements, which are sent back in piggybacking */
-        /*if (outBuffer->packetsAvailable()) {
-            packet = outBuffer->getNextAvailablePacket();
-            if (packet == NULL) {
-                //Channels are currently blocked and packets cannot be sent
-                state = BLOCKED;
-                txCond.wait(lock);
+                pkt = controlQueue.front();
+                if (_sendControlPacket(pkt)) {
+                    controlQueue.pop();
+                    controlRetransmissionQueue.push(pkt);
+                    start = std::chrono::system_clock::now();
+                }
                 continue;
             }
-            state = RUNNING;
-            _sendDataPacket(packet);
+        }
+
+        /* PRIORITY 3
+         * Normal flow, send out a message from a queue,
+         * which couldn't previously be sent right away */
+        if (!connectionRoundRobin.empty()) {
+            //Attempt first request in queue
+            uint8_t port = connectionRoundRobin.front();
+            connectionRoundRobin.pop();
+            connection = connectionManager->getConnection(port);
+            if (connection != nullptr) {
+                pkt = connection->peekNextOutPacket();
+                if (pkt != nullptr && _isChannelAvailable(pkt->channel)) {
+                    //Attempt to forward packet to link layer
+                    bool arq = pkt->options & (uint8_t)S3TP_ARQ;
+                    if (linkInterface->sendFrame(arq, pkt->channel, pkt->packet, pkt->getLength()) < 0) {
+                        //Blacklisting channel
+                        _setChannelAvailable(pkt->channel, false);
+                        //Will retry this message later
+                        connectionRoundRobin.push(port);
+                    } else {
+                        //Packet forwarded successfully, popping from connection out buffer
+                        connection->getNextOutPacket();
+                        S3TP_HEADER * hdr = pkt->getHeader();
+                        LOG_DEBUG(std::string("[TX] Data Packet sent. SRC: " + std::to_string((int)hdr->srcPort)
+                                              + ", DST: " + std::to_string((int)hdr->destPort)
+                                              + ", SEQ: " + std::to_string((int)hdr->seq)
+                                              + ", LEN: " + std::to_string((int)hdr->pdu_length)));
+                    }
+                } else {
+                    //Will retry this message later
+                    connectionRoundRobin.push(port);
+                }
+            }
             continue;
         } else {
-            //In case no data is available, we may still want to send out an ack
-            if (scheduledAck && _isChannelAvailable(DEFAULT_RESERVED_CHANNEL)) {
-                if (linkInterface->getBufferFull(DEFAULT_RESERVED_CHANNEL)) {
-                    _setChannelAvailable(DEFAULT_RESERVED_CHANNEL, false);
-                } else {
-                    sendAcknowledgement();
-                    scheduledAck = false;
-                }
-            }
             state = WAITING;
-            if (safeQueue.empty()) {
-                //No more acks to send. Wait indefinitely, until a packet needs to be sent out
-                txCond.wait(lock);
-            } else {
-                //Still waiting for acks. Need to retransmit after a certain time.
-                _timedWait();
-                if (elapsedTime >= ACK_WAIT_TIME) {
-                    retransmissionRequired = true;
-                }
-            }
-            continue;
-        }*/
+            txCond.wait(lock);
+        }
     }
     //Thread will die on its own
 }
@@ -180,22 +172,19 @@ void TxModule::_timedWait() {
     elapsedTime = difference.count();
 }*/
 
-void TxModule::_sendControlPacket(std::shared_ptr<S3TP_PACKET> pkt) {
-    txMutex.unlock();
+bool TxModule::_sendControlPacket(std::shared_ptr<S3TP_PACKET> pkt) {
+    S3TP_HEADER * hdr = pkt->getHeader();
+    LOG_DEBUG(std::string("[TX]: Control Packet sent to Link Layer -> seq: "
+                          + std::to_string((int)hdr->seq)));
 
-    /*LOG_DEBUG(std::string("[TX]: Control Packet sent to Link Layer -> seq: "
-                          + std::to_string((int)hdr->seq)));*/
-
-    bool arq = pkt->options & S3TP_ARQ;
+    bool arq = pkt->options & (uint8_t)S3TP_ARQ;
 
     if (linkInterface->sendFrame(arq, pkt->channel, pkt->packet, pkt->getLength()) < 0) {
         //Blacklisting channel
-        txMutex.lock();
         _setChannelAvailable(pkt->channel, false);
-        retransmissionRequired = true;
-    } else {
-        txMutex.lock();
+        return false;
     }
+    return true;
 }
 
 /**
@@ -248,7 +237,8 @@ void TxModule::_sendControlPacket(std::shared_ptr<S3TP_PACKET> pkt) {
 /*
  * Routine section
  */
-void TxModule::retransmitPackets() {
+int TxModule::retransmitControlPackets() {
+    //TODO: reimplement
     S3TP_HEADER * hdr;
     uint16_t relativePktSeq;
 
@@ -282,6 +272,7 @@ void TxModule::retransmitPackets() {
             }
         }
     }*/
+    return 0;
 }
 
 //Public methods
@@ -313,12 +304,6 @@ TxModule::STATE TxModule::getCurrentState() {
     STATE current = state;
     txMutex.unlock();
     return current;
-}
-
-//TODO: make direct call to connection
-bool TxModule::isQueueAvailable(uint8_t port, uint8_t no_packets) {
-    //return outBuffer->getSizeOfQueue(port) + no_packets <= MAX_QUEUE_SIZE;
-    return false;
 }
 
 void TxModule::setChannelAvailable(uint8_t channel, bool available) {
@@ -384,7 +369,6 @@ void TxModule::onNewOutPacket(Connection& connection) {
     S3TP_PACKET * pkt = connection.peekNextOutPacket();
     if (pkt != nullptr) {
         if (state == WAITING
-            && linkInterface->getLinkStatus()
             && _isChannelAvailable(pkt->channel)) {
             //Attempt to forward packet to link layer
             bool arq = pkt->options & (uint8_t)S3TP_ARQ;
@@ -404,37 +388,7 @@ void TxModule::onNewOutPacket(Connection& connection) {
             //Scheduling async thread to send this packet in the future
             connectionRoundRobin.push(connection.getSourcePort());
         }
-        txCond.notify_all();
+        txCond.notify_all(); //TODO: needed?!
         txMutex.unlock();
     }
 }
-
-/*
- * Policy Actor methods
- */
-int TxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
-    int comp = 0;
-    uint8_t seq1, seq2, offset;
-    txMutex.lock();
-
-    //offset = to_consume_port_seq[element1->getHeader()->srcPort];
-    seq1 = element1->getHeader()->seq - offset;
-    seq2 = element2->getHeader()->seq - offset;
-    if (seq1 < seq2) {
-        comp = -1; //Element 1 is lower, hence has higher priority
-    } else if (seq1 > seq2) {
-        comp = 1; //Element 2 is lower, hence has higher priority
-    }
-    txMutex.unlock();
-    return comp;
-}
-
-bool TxModule::isElementValid(S3TP_PACKET * element) {
-    return _isChannelAvailable(element->channel);
-}
-
-bool TxModule::maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newElement) {
-    //Implementation not needed inside Tx Module
-    return false;
-}
-

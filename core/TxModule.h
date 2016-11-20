@@ -25,7 +25,7 @@
 #define ACK_WAIT_TIME 10000 //Milliseconds
 #define MAX_RETRANSMISSION_COUNT 2
 
-class TxModule : public PolicyActor<S3TP_PACKET *>, ConnectionManager::OutPacketListener {
+class TxModule : public ConnectionManager::OutPacketListener {
 public:
     enum STATE {
         RUNNING,
@@ -48,7 +48,6 @@ public:
 
     //Public channel and link methods
     void notifyLinkAvailability(bool available);
-    bool isQueueAvailable(uint8_t port, uint8_t no_packets);
     void setChannelAvailable(uint8_t channel, bool available);
     bool isChannelAvailable(uint8_t channel);
 private:
@@ -63,13 +62,13 @@ private:
 
     //Control variables
     std::queue<std::shared_ptr<S3TP_PACKET>> controlQueue; //High priority queue
+    bool needsControlRetransmission;
+    std::queue<std::shared_ptr<S3TP_PACKET>> controlRetransmissionQueue;
+    uint8_t currentControlSequence;
 
     //Connection manager
     std::shared_ptr<ConnectionManager> connectionManager;
     std::queue<uint8_t> connectionRoundRobin;
-
-    //Safe output buffer
-    bool retransmissionRequired;
 
     //Transmission control timer
     std::chrono::time_point<std::chrono::system_clock> start, now;
@@ -77,8 +76,8 @@ private:
     int retransmissionCount;
 
     void txRoutine();
-    void retransmitPackets();
-    void _sendControlPacket(std::shared_ptr<S3TP_PACKET> pkt);
+    int retransmitControlPackets();
+    bool _sendControlPacket(std::shared_ptr<S3TP_PACKET> pkt);
 
     //Internal methods for accessing channels (do not use locking)
     bool _channelsAvailable();
@@ -87,11 +86,6 @@ private:
 
     //Connection Listener callbacks
     void onNewOutPacket(Connection& connection);
-
-    //Policy Actor implementation
-    virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
-    virtual bool isElementValid(S3TP_PACKET * element);
-    virtual bool maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newElement);
 };
 
 #endif //S3TP_TXMODULE_H
