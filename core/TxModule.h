@@ -25,7 +25,7 @@
 #define ACK_WAIT_TIME 10000 //Milliseconds
 #define MAX_RETRANSMISSION_COUNT 2
 
-class TxModule : public PolicyActor<S3TP_PACKET *> {
+class TxModule : public PolicyActor<S3TP_PACKET *>, ConnectionManager::OutPacketListener {
 public:
     enum STATE {
         RUNNING,
@@ -39,7 +39,6 @@ public:
     STATE getCurrentState();
     void startRoutine(Transceiver::LinkInterface * spi_if, std::shared_ptr<ConnectionManager> connectionManager);
     void stopRoutine();
-    int enqueuePacket(S3TP_PACKET * packet, uint8_t frag_no, bool more_fragments, uint8_t spi_channel, uint8_t options);
     void reset();
     void setStatusInterface(StatusInterface * statusInterface);
 
@@ -64,10 +63,10 @@ private:
 
     //Control variables
     std::queue<std::shared_ptr<S3TP_PACKET>> controlQueue; //High priority queue
-    bool isSetup;
 
     //Connection manager
     std::shared_ptr<ConnectionManager> connectionManager;
+    std::queue<uint8_t> connectionRoundRobin;
 
     //Safe output buffer
     bool retransmissionRequired;
@@ -79,13 +78,15 @@ private:
 
     void txRoutine();
     void retransmitPackets();
-    void _sendRegularPacket(std::shared_ptr<S3TP_PACKET> pkt);
     void _sendControlPacket(std::shared_ptr<S3TP_PACKET> pkt);
 
     //Internal methods for accessing channels (do not use locking)
     bool _channelsAvailable();
     void _setChannelAvailable(uint8_t channel, bool available);
     bool _isChannelAvailable(uint8_t channel);
+
+    //Connection Listener callbacks
+    void onNewOutPacket(Connection& connection);
 
     //Policy Actor implementation
     virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);

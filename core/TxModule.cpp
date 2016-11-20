@@ -180,38 +180,6 @@ void TxModule::_timedWait() {
     elapsedTime = difference.count();
 }*/
 
-void TxModule::_sendRegularPacket(std::shared_ptr<S3TP_PACKET> pkt) {
-    S3TP_HEADER * hdr = pkt->getHeader();
-
-    txMutex.unlock();
-
-    LOG_DEBUG(std::string("[TX] Data Packet sent. SRC: " + std::to_string((int)hdr->srcPort)
-                          + ", DST: " + std::to_string((int)hdr->destPort)
-                          + ", SEQ: " + std::to_string((int)hdr->seq)
-                          + ", LEN: " + std::to_string((int)hdr->pdu_length)));
-
-    bool arq = pkt->options & S3TP_ARQ;
-
-    if (linkInterface->sendFrame(arq, pkt->channel, pkt->packet, pkt->getLength()) < 0) {
-        //Blacklisting channel
-        txMutex.lock();
-        _setChannelAvailable(pkt->channel, false);
-        //TODO: make this better somehow
-        retransmissionRequired = true;
-        txMutex.unlock();
-    }
-
-    //Since a packet was just popped from the buffer, the queue is definitely available
-
-    //TODO: use correct port
-    /*if (outBuffer->getSizeOfQueue(hdr->srcPort) + 1 == MAX_QUEUE_SIZE
-        && statusInterface != nullptr) {
-        statusInterface->onOutputQueueAvailable(hdr->srcPort);
-    }*/
-
-    txMutex.lock();
-}
-
 void TxModule::_sendControlPacket(std::shared_ptr<S3TP_PACKET> pkt) {
     txMutex.unlock();
 
@@ -321,6 +289,7 @@ void TxModule::startRoutine(Transceiver::LinkInterface * spi_if, std::shared_ptr
     txMutex.lock();
     linkInterface = spi_if;
     this->connectionManager = connectionManager;
+    this->connectionManager->setOutPacketListener(this);
     active = true;
     txThread = std::thread(&TxModule::txRoutine, this);
     txMutex.unlock();
@@ -346,6 +315,7 @@ TxModule::STATE TxModule::getCurrentState() {
     return current;
 }
 
+//TODO: make direct call to connection
 bool TxModule::isQueueAvailable(uint8_t port, uint8_t no_packets) {
     //return outBuffer->getSizeOfQueue(port) + no_packets <= MAX_QUEUE_SIZE;
     return false;
@@ -400,43 +370,48 @@ void TxModule::notifyLinkAvailability(bool available) {
     }
 }
 
-/**
- * This method is supposed to be called with an already well-formed S3TP packet.
- * The header fields will be filled within this method, but the length of the payload must be already set.
- * Header fields that will be filled automatically include:
- * - global sequence number;
- * - sub-sequence number (used for fragmentation);
- * - port sequence;
- * - CRC.
+/*
+ * On new packet to send callback
  */
-int TxModule::enqueuePacket(S3TP_PACKET * packet,
-                            uint8_t frag_no,
-                            bool more_fragments,
-                            uint8_t spi_channel,
-                            uint8_t options) {
+void TxModule::onNewOutPacket(Connection& connection) {
     txMutex.lock();
     if (!active) {
-        //If is not active, do not attempt to enqueue something
+        //Not active, should throw an error
         txMutex.unlock();
-        return CODE_INACTIVE_ERROR;
+        return;
     }
-    S3TP_HEADER * hdr = packet->getHeader();
-    //Not setting global seq, as it will be set by transmission thread, when actually sending the packet to L2
-    if (more_fragments) {
-        hdr->setMoreFragments();
-    } else {
-        hdr->unsetMoreFragments();
+
+    S3TP_PACKET * pkt = connection.peekNextOutPacket();
+    if (pkt != nullptr) {
+        if (state == WAITING
+            && linkInterface->getLinkStatus()
+            && _isChannelAvailable(pkt->channel)) {
+            //Attempt to forward packet to link layer
+            bool arq = pkt->options & (uint8_t)S3TP_ARQ;
+            if (linkInterface->sendFrame(arq, pkt->channel, pkt->packet, pkt->getLength()) < 0) {
+                //Blacklisting channel
+                _setChannelAvailable(pkt->channel, false);
+            } else {
+                //Packet forwarded successfully, popping from connection out buffer
+                connection.getNextOutPacket();
+                S3TP_HEADER * hdr = pkt->getHeader();
+                LOG_DEBUG(std::string("[TX] Data Packet sent. SRC: " + std::to_string((int)hdr->srcPort)
+                                      + ", DST: " + std::to_string((int)hdr->destPort)
+                                      + ", SEQ: " + std::to_string((int)hdr->seq)
+                                      + ", LEN: " + std::to_string((int)hdr->pdu_length)));
+            }
+        } else {
+            //Scheduling async thread to send this packet in the future
+            connectionRoundRobin.push(connection.getSourcePort());
+        }
+        txCond.notify_all();
+        txMutex.unlock();
     }
-    //Increasing port sequence
-    int port = hdr->srcPort;
-    //hdr->seq = port_sequence[port]++;
-    txMutex.unlock();
-
-    txCond.notify_all();
-
-    return CODE_SUCCESS;
 }
 
+/*
+ * Policy Actor methods
+ */
 int TxModule::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
     int comp = 0;
     uint8_t seq1, seq2, offset;
