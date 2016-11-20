@@ -10,8 +10,10 @@
 
 #include "CommonTypes.h"
 
-uint16_t calc_checksum(const char *data, uint16_t size);
-bool verify_checksum(const char *data, uint16_t len, uint16_t checksum);
+struct NumericRange {
+    uint8_t start;
+    uint8_t end;
+};
 //u64 get_timestamp();
 
 
