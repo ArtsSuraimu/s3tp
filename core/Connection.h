@@ -15,7 +15,7 @@
 #define CODE_CONNECTION_ERROR -2
 #define CODE_INVALID_PACKET -3
 
-class Connection {
+class Connection: public PolicyActor<S3TP_PACKET*> {
 private:
     uint8_t virtualChannel;
     uint8_t options;
@@ -45,6 +45,11 @@ private:
     void _scheduleAcknowledgement(uint8_t ackSequence);
     void _updateCumulativeAcknowledgement(uint8_t sequence);
     void updateState(STATE newState);
+
+    //Policy Actor implementation
+    int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
+    bool isElementValid(S3TP_PACKET * element);
+    bool maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newElement);
 public:
     enum STATE {
         CONNECTING,

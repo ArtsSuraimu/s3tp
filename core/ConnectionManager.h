@@ -38,12 +38,12 @@ public:
 
     class OutPacketListener {
     public:
-        void onNewOutPacket(Connection& connection);
+        virtual void onNewOutPacket(Connection& connection) = 0;
     };
 
     class InPacketListener {
     public:
-        void onNewInPacket(Connection& connection);
+        virtual void onNewInPacket(Connection& connection) = 0;
     };
 };
 

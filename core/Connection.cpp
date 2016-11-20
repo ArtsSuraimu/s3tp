@@ -86,8 +86,7 @@ void Connection::_syn() {
     hdr->seq = currentOutSequence++;
     hdr->setSyn(true);
 
-    //TODO: policy actor
-    outBuffer.push(pkt, nullptr);
+    outBuffer.push(pkt, this);
     updateState(CONNECTING);
 }
 
@@ -105,8 +104,7 @@ void Connection::_syncAck() {
     hdr->setSyn(true);
     hdr->setAck(true);
 
-    //TODO: policy actor
-    outBuffer.push(pkt, nullptr);
+    outBuffer.push(pkt, this);
     updateState(CONNECTING);
 }
 
@@ -123,8 +121,7 @@ void Connection::_fin() {
     hdr->seq = currentOutSequence++;
     hdr->setFin(true);
 
-    //TODO: policy actor
-    outBuffer.push(pkt, nullptr);
+    outBuffer.push(pkt, this);
     updateState(DISCONNECTING);
 }
 
@@ -142,8 +139,7 @@ void Connection::_finAck(uint8_t sequence) {
     hdr->setFin(true);
     hdr->setAck(true);
 
-    //TODO: policy actor
-    outBuffer.push(pkt, nullptr);
+    outBuffer.push(pkt, this);
     updateState(DISCONNECTING);
 }
 
@@ -210,6 +206,9 @@ void Connection::_sack() {
     hdr->seq = currentOutSequence++;
     hdr->setAck(true);
     hdr->setCtrl(true); //Special message used for transmitting selective acks
+
+    //TODO: policy actor
+    outBuffer.push(pkt, nullptr);
 }
 
 void Connection::_handleAcknowledgement(uint8_t sequence) {
@@ -229,9 +228,7 @@ void Connection::_scheduleAcknowledgement(uint8_t ackSequence) {
         //Old or invalid acknowledgement. Ignore
         return;
     }
-    if (scheduledAcknowledgements[ackSequence]) {
-        //TODO: handle double acknowledgement
-    }
+    //Not handling double acknowledgements separately
     scheduledAcknowledgements[ackSequence] = true;
     numberOfScheduledAcknowledgements += 1;
     _updateCumulativeAcknowledgement(ackSequence);
@@ -387,9 +384,11 @@ int Connection::sendOutPacket(S3TP_PACKET * pkt) {
     }
 
     outBuffer.lock();
-    //TODO: use policy actor
-    outBuffer.push(pkt, nullptr);
+    outBuffer.push(pkt, this);
     outBuffer.unlock();
+    if (connectionListener != nullptr) {
+        connectionListener->onNewOutPacket(*this);
+    }
 
     connectionMutex.unlock();
 
@@ -425,7 +424,7 @@ int Connection::receiveInPacket(S3TP_PACKET * pkt) {
             }
             _handleAcknowledgement(hdr->ack);
             _scheduleAcknowledgement(hdr->seq);
-            expectedInSequence += 1;
+            expectedInSequence += 1; //TODO: needed?!
             updateState(CONNECTED);
             connectionMutex.unlock();
             delete pkt;
@@ -480,8 +479,12 @@ int Connection::receiveInPacket(S3TP_PACKET * pkt) {
         _handleAcknowledgement(hdr->ack);
     }
 
-    //TODO: use policy actor
-    inBuffer.push(pkt, nullptr);
+    //TODO: races?! make this better
+    inBuffer.push(pkt, this);
+    _scheduleAcknowledgement(hdr->seq);
+    if (connectionListener != nullptr) {
+        connectionListener->onNewInPacket(*this);
+    }
 
     connectionMutex.unlock();
 
@@ -506,4 +509,39 @@ void Connection::close() {
         _fin();
     }
     connectionMutex.unlock();
+}
+
+/*
+ * Policy Actor methods
+ */
+int Connection::comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2) {
+    int comp = 0;
+    uint8_t seq1, seq2;
+    uint8_t offset;
+    if (element1->getHeader()->srcPort == srcPort) {
+        offset = currentOutSequence;
+    } else {
+        offset = expectedInSequence;
+    }
+
+    seq1 = element1->getHeader()->seq - offset;
+    seq2 = element2->getHeader()->seq - offset;
+    if (seq1 < seq2) {
+        comp = -1; //Element 1 is lower, hence has higher priority
+    } else if (seq1 > seq2) {
+        comp = 1; //Element 2 is lower, hence has higher priority
+    }
+
+    return comp;
+}
+
+bool Connection::isElementValid(S3TP_PACKET * element) {
+    //TODO: needed?!
+    return true;
+}
+
+bool Connection::maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newElement) {
+    //Implementation not needed inside Tx Module
+    //TODO: needed?!
+    return false;
 }
