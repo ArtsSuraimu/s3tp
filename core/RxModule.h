@@ -10,6 +10,7 @@
 #include "utilities.h"
 #include "StatusInterface.h"
 #include "TransportInterface.h"
+#include "ConnectionManager.h"
 #include <cstring>
 #include <map>
 #include <vector>
@@ -24,7 +25,7 @@
 #define CODE_ERROR_INCONSISTENT_STATE -6
 
 class RxModule: public Transceiver::LinkCallback,
-                        PolicyActor<S3TP_PACKET*> {
+                        ConnectionManager::InPacketListener {
 public:
     RxModule();
     ~RxModule();
@@ -45,29 +46,21 @@ public:
     void reset();
 private:
     bool active;
-    Buffer * inBuffer;
-    uint8_t to_consume_global_seq;
-    uint16_t expectedSequence;
+    std::shared_ptr<ConnectionManager> connectionManager;
     std::mutex rxMutex;
     std::condition_variable availableMsgCond;
 
     StatusInterface * statusInterface;
     TransportInterface * transportInterface;
     std::map<uint8_t, uint8_t> open_ports;
-    std::map<uint8_t, uint8_t> current_port_sequence;
-    std::map<uint8_t, uint8_t> available_messages;
 
     // LinkCallback
     void handleFrame(bool arq, int channel, const void* data, int length);
     int handleReceivedPacket(S3TP_PACKET * packet);
     int handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control);
-    virtual void handleBufferEmpty(int channel);
-    void handleAcknowledgement(uint16_t ackNumber);
     void handleLinkStatus(bool linkStatus);
     bool isPortOpen(uint8_t port);
     bool isCompleteMessageForPortAvailable(int port);
-    void flushQueues();
-    bool updateInternalSequence(uint16_t sequence, bool moreFragments);
 };
 
 
