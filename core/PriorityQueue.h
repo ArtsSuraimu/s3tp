@@ -48,7 +48,7 @@ public:
 private:
 	PriorityQueue_node<T> * head;
 	PriorityQueue_node<T> * tail;
-	pthread_mutex_t q_mutex;
+	std::mutex qMutex;
 	uint16_t size;
 };
 
@@ -70,32 +70,26 @@ template <typename T>
 PriorityQueue<T>::PriorityQueue() :
 	head(nullptr),
 	tail(nullptr),
-	size(0)
-{
-	pthread_mutex_init(&q_mutex, NULL);
-}
+	size(0) {}
 
 template <typename T>
 PriorityQueue<T>::~PriorityQueue() {
 	clear();
-	pthread_mutex_destroy(&q_mutex);
 }
 
 template <typename T>
 bool PriorityQueue<T>::isEmpty() {
-	pthread_mutex_lock(&q_mutex);
-	bool result = size == 0;
-	pthread_mutex_unlock(&q_mutex);
-	return result;
+	std::unique_lock<std::mutex> lock{qMutex};
+
+	return size == 0;
 }
 
 template <typename T>
 T PriorityQueue<T>::peek() {
 	assert(!isEmpty());
-	pthread_mutex_lock(&q_mutex);
-	T result = head->element;
-	pthread_mutex_unlock(&q_mutex);
-	return result;
+	std::unique_lock<std::mutex> lock{qMutex};
+
+	return head->element;
 }
 
 template <typename T>
@@ -107,7 +101,7 @@ T PriorityQueue<T>::pop() {
 	assert(!isEmpty());
 
     //Entering critical section
-    pthread_mutex_lock(&q_mutex);
+	std::unique_lock<std::mutex> lock{qMutex};
 	ref = head;
 
 	if (ref->next == NULL) {
@@ -125,9 +119,6 @@ T PriorityQueue<T>::pop() {
 	//Decrease current buffer size
 	size -= 1;
 
-	//Exiting critical section
-	pthread_mutex_unlock(&q_mutex);
-
 	return element;
 }
 
@@ -136,12 +127,11 @@ int PriorityQueue<T>::push(T element, PolicyActor<T> * comparator) {
 	PriorityQueue_node<T> *ref, *newNode, *swap;
 
 	//Enter critical section
-	pthread_mutex_lock(&q_mutex);
+	std::unique_lock<std::mutex> lock{qMutex};
 
 	if (size >= MAX_QUEUE_CAPACITY) {
 		//Queue is full, dropping new element
 		//Exit critical section
-		pthread_mutex_unlock(&q_mutex);
 		return QUEUE_FULL;
 	}
 
@@ -182,51 +172,45 @@ int PriorityQueue<T>::push(T element, PolicyActor<T> * comparator) {
 	//Increase current buffer size
 	size += 1;
 
-	//Exit critical section
-	pthread_mutex_unlock(&q_mutex);
-
 	return CODE_SUCCESS;
 }
 
 template <typename T>
 uint32_t PriorityQueue<T>::computeBufferSize() {
-	pthread_mutex_lock(&q_mutex);
-	uint32_t result = size * sizeof(S3TP_PACKET);
-	pthread_mutex_unlock(&q_mutex);
-	return result;
+	std::unique_lock<std::mutex> lock {qMutex};
+
+	return size * sizeof(S3TP_PACKET);
 }
 
 template <typename T>
 uint16_t PriorityQueue<T>::getSize() {
-	pthread_mutex_lock(&q_mutex);
-	uint16_t result = size;
-	pthread_mutex_unlock(&q_mutex);
-	return result;
+	std::unique_lock<std::mutex> lock{qMutex};
+
+	return size;
 }
 
 template <typename T>
 void PriorityQueue<T>::clear() {
-	pthread_mutex_lock(&q_mutex);
+	std::unique_lock<std::mutex> lock{qMutex};
 	PriorityQueue_node<T> * ref = head;
 	while (ref != NULL) {
 		head = ref->next;
 		delete ref;
-		//TODO: delete element?
+		//Not deleting element. Smart pointers are expected
 		ref = head;
 	}
 	tail = head;
 	size = 0;
-	pthread_mutex_unlock(&q_mutex);
 }
 
 template <typename T>
 void PriorityQueue<T>::lock() {
-	pthread_mutex_lock(&q_mutex);
+	qMutex.lock();
 }
 
 template <typename T>
 void PriorityQueue<T>::unlock() {
-	pthread_mutex_unlock(&q_mutex);
+	qMutex.unlock();
 }
 
 template <typename T>
