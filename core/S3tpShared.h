@@ -69,7 +69,7 @@ enum AppControlMessageType {
 /*
  * Typedefs
  */
-typedef int SOCKET;
+typedef int Socket;
 
 typedef struct tag_s3tp_config {
     uint8_t port;

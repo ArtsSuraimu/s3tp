@@ -19,7 +19,7 @@
 //Eigth channel is reserved and should not be available for applications to use
 #define S3TP_VIRTUAL_CHANNELS 7
 
-typedef int SOCKET;
+typedef int Socket;
 
 #pragma pack(push, 1)
 /**

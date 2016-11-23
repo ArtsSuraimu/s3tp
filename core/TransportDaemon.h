@@ -22,7 +22,7 @@
 class s3tp_daemon {
 private:
     sockaddr_un address;
-    SOCKET server;
+    Socket server;
     S3TP s3tp;
 
 public:

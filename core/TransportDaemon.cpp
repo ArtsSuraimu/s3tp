@@ -32,7 +32,7 @@ int s3tp_daemon::init(void * args) {
 void s3tp_daemon::startDaemon() {
     sockaddr_un cl_address;
     socklen_t addrlen;
-    SOCKET new_socket;
+    Socket new_socket;
     S3TP_CONFIG config;
     ssize_t rd, wr;
     int commCode;
