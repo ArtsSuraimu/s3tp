@@ -34,33 +34,33 @@ public:
     void setTransportInterface(TransportInterface * transportInterface);
     void startModule();
     void stopModule();
-    int openPort(uint8_t port);
-    int closePort(uint8_t port);
     bool isActive();
     bool isNewMessageAvailable();
     void waitForNextAvailableMessage(std::mutex * callerMutex);
     char * getNextCompleteMessage(uint16_t * len, int * error, uint8_t * port);
-    virtual int comparePriority(S3TP_PACKET* element1, S3TP_PACKET* element2);
-    virtual bool isElementValid(S3TP_PACKET * element);
-    virtual bool maximumWindowExceeded(S3TP_PACKET* queueHead, S3TP_PACKET* newElement);
     void reset();
 private:
     bool active;
     std::shared_ptr<ConnectionManager> connectionManager;
     std::mutex rxMutex;
-    std::condition_variable availableMsgCond;
 
     StatusInterface * statusInterface;
     TransportInterface * transportInterface;
-    std::map<uint8_t, uint8_t> open_ports;
+
+    //Delivery logic
+    std::set<uint8_t> availableMessages;
+    std::condition_variable availableMsgCond;
+    std::thread deliveryThread;
+    void deliveryRoutine();
 
     // LinkCallback
     void handleFrame(bool arq, int channel, const void* data, int length);
     int handleReceivedPacket(S3TP_PACKET * packet);
     int handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control);
     void handleLinkStatus(bool linkStatus);
-    bool isPortOpen(uint8_t port);
-    bool isCompleteMessageForPortAvailable(int port);
+    bool isCompleteMessageForPortAvailable(uint8_t port);
+
+    void onNewInPacket(Connection& connection);
 };
 
 

@@ -8,16 +8,16 @@ RxModule::RxModule() : statusInterface{nullptr}, transportInterface{nullptr} {}
 
 RxModule::~RxModule() {
     stopModule();
-    rxMutex.lock();
-
-    rxMutex.unlock();
-    //TODO: implement. Also remember to close all ports
+    reset();
+    if (deliveryThread.joinable()) {
+        deliveryThread.join();
+    }
 }
 
 void RxModule::reset() {
-    rxMutex.lock();
-    open_ports.clear();
-    rxMutex.unlock();
+    std::unique_lock<std::mutex> lock{rxMutex};
+    availableMessages.clear();
+    //TODO: reimplement. Close all ports
 }
 
 void RxModule::setStatusInterface(StatusInterface * statusInterface) {
@@ -33,24 +33,45 @@ void RxModule::setTransportInterface(TransportInterface * transportInterface) {
 }
 
 void RxModule::startModule() {
-    rxMutex.lock();
+    std::unique_lock<std::mutex> lock{rxMutex};
     active = true;
-    rxMutex.unlock();
+    deliveryThread = std::thread(&RxModule::deliveryRoutine, this);
 }
 
 void RxModule::stopModule() {
-    rxMutex.lock();
+    std::unique_lock<std::mutex> lock{rxMutex};
     active = false;
-    //Signaling any thread that is currently waiting for an incoming message.
-    // Such thread should then check the status of the module, in order to avoid waiting forever.
+    //Signaling the delivery thread which might be currently waiting for an incoming message.
+    //Such thread should then check the status of the module, in order to avoid waiting forever.
     availableMsgCond.notify_all();
-    rxMutex.unlock();
 }
 
 bool RxModule::isActive() {
     std::unique_lock<std::mutex> lock{rxMutex};
     bool result = active;
     return result;
+}
+
+/*
+ * Delivery thread logic
+ */
+void RxModule::deliveryRoutine() {
+    std::unique_lock<std::mutex> lock{rxMutex};
+
+    while (active) {
+        if (availableMessages.empty()) {
+            availableMsgCond.wait(lock);
+            continue;
+        }
+        uint8_t port = *availableMessages.begin();
+        std::shared_ptr<Connection> connection = connectionManager->getConnection(port);
+        if (connection == nullptr || !connection->inPacketsAvailable()) {
+            availableMessages.erase(port);
+            continue;
+        }
+        S3TP_PACKET * pkt = connection->getNextInPacket();
+        //TODO: Deliver packet to client
+    }
 }
 
 /*
@@ -75,46 +96,6 @@ void RxModule::handleLinkStatus(bool linkStatus) {
     rxMutex.unlock();
 }
 
-int RxModule::openPort(uint8_t port) {
-    rxMutex.lock();
-    if (!active) {
-        rxMutex.unlock();
-        return MODULE_INACTIVE;
-    }
-    if (open_ports.find(port) != open_ports.end()) {
-        //Port is already open
-        rxMutex.unlock();
-        return PORT_ALREADY_OPEN;
-    }
-    open_ports[port] = 1;
-    rxMutex.unlock();
-
-    return CODE_SUCCESS;
-}
-
-int RxModule::closePort(uint8_t port) {
-    rxMutex.lock();
-    if (!active) {
-        rxMutex.unlock();
-        return MODULE_INACTIVE;
-    }
-    if (open_ports.find(port) != open_ports.end()) {
-        open_ports.erase(port);
-        rxMutex.unlock();
-        return CODE_SUCCESS;
-    }
-
-    rxMutex.unlock();
-    return PORT_ALREADY_CLOSED;
-}
-
-bool RxModule::isPortOpen(uint8_t port) {
-    rxMutex.lock();
-    bool result = (open_ports.find(port) != open_ports.end() && active);
-    rxMutex.unlock();
-    return result;
-}
-
 int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     if (!isActive()) {
         return MODULE_INACTIVE;
@@ -126,8 +107,11 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
     S3TP_HEADER * hdr = packet->getHeader();
     std::shared_ptr<Connection> connection = connectionManager->getConnection(hdr->destPort);
     if (connection == nullptr) {
-        //TODO: return meaningful error
-        return -10;
+        LOG_INFO(std::string("Incoming packet " + std::to_string(hdr->seq)
+                             + "for port " + std::to_string(hdr->destPort)
+                             + " was dropped because port is closed"));
+        //TODO: schedule out of band error
+        return CODE_ERROR_PORT_CLOSED;
     }
 
     uint8_t flags = hdr->getFlags();
@@ -136,30 +120,15 @@ int RxModule::handleReceivedPacket(S3TP_PACKET * packet) {
         handleControlPacket(nullptr, nullptr);
     } else {
         connection->receiveInPacket(packet);
-    }
-    //TODO: check if pdu length + header size > total length (there might've been an error), otherwise buffer overflow
-
-    //TODO: change logic
-    /*if (!isPortOpen(hdr->destPort)) {
-        //Dropping packet, as there is no application to receive it
-        LOG_INFO(std::string("Incoming packet " + std::to_string(hdr->seq)
-                             + "for port " + std::to_string(hdr->destPort)
-                             + " was dropped because port is closed"));
-        return CODE_ERROR_PORT_CLOSED;
-    } else {
-        if (result != CODE_SUCCESS) {
-            //Something bad happened, couldn't put packet in buffer
-            LOG_ERROR(std::string("Could not put packet " + std::to_string((int)hdr->seq) + " in buffer"));
-            return result;
-        }
-
         LOG_DEBUG(std::string("[RX] Packet received. SRC: " + std::to_string((int)hdr->srcPort)
                               + ", DST: " + std::to_string((int)hdr->destPort)
                               + ", SEQ: " + std::to_string((int)hdr->seq)
                               + ", LEN: " + std::to_string((int)hdr->pdu_length)));
     }
+    //TODO: check if pdu length + header size > total length (there might've been an error), otherwise buffer overflow
 
-    rxMutex.lock();
+
+    /*rxMutex.lock();
     if (isCompleteMessageForPortAvailable(hdr->destPort)) {
         //New message is available, notify
         available_messages[hdr->destPort] = 1;
@@ -225,33 +194,13 @@ int RxModule::handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control) {
     return CODE_SUCCESS;
 }
 
-bool RxModule::isCompleteMessageForPortAvailable(int port) {
-    //Method is called internally, no need for locks
-    /*PriorityQueue<S3TP_PACKET*> * q = inBuffer->getQueue(port);
-    q->lock();
-    PriorityQueue_node<S3TP_PACKET*> * node = q->getHead();
-    uint8_t fragment = 0;
-    while (node != NULL) {
-        S3TP_PACKET * pkt = node->element;
-        S3TP_HEADER * hdr = pkt->getHeader();
-        //TODO: reimplement properly
-        if (hdr->seq != (current_port_sequence[port] + fragment)) {
-            //Packet in queue is not the one with highest priority
-            break; //Will return false
-        } else if (hdr->moreFragments() && hdr->seq != fragment) {
-            //Current fragment number is not the expected number,
-            // i.e. at least one fragment is missing to complete the message
-            break; //Will return false
-        } else if (!hdr->moreFragments() && hdr->seq == fragment) {
-            //Packet is last fragment, message is complete
-            q->unlock();
-            return true;
-        }
-        fragment++;
-        node = node->next;
+bool RxModule::isCompleteMessageForPortAvailable(uint8_t port) {
+    std::unique_lock<std::mutex> lock{rxMutex};
+    std::shared_ptr<Connection> connection = connectionManager->getConnection(port);
+    if (connection != nullptr) {
+        return connection->inPacketsAvailable();
     }
-    //End of queue reached
-    q->unlock();*/
+
     return false;
 }
 
@@ -327,4 +276,8 @@ char * RxModule::getNextCompleteMessage(uint16_t * len, int * error, uint8_t * p
     memcpy(data, assembledData.data(), assembledData.size());
     return data;*/
     return nullptr;
+}
+
+void RxModule::onNewInPacket(Connection& connection) {
+
 }
