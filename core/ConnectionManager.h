@@ -26,6 +26,7 @@ public:
     bool closeConnection(uint8_t srcPort);
     void closeAllConnections(bool forced);
     int openConnectionsCount();
+    void notifyAvailabilityToClients();
     void setInPacketListener(InPacketListener * listener);
 
     class InPacketListener {

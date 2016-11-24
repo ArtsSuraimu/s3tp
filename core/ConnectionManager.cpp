@@ -66,6 +66,18 @@ int ConnectionManager::openConnectionsCount() {
     return (int)openConnections.size();
 }
 
+void ConnectionManager::notifyAvailabilityToClients() {
+    S3TP_CONNECTOR_CONTROL control;
+    control.controlMessageType = AVAILABLE;
+    control.error = 0;
+
+    //Notifies all clients
+    std::unique_lock<std::mutex> lock{connectionsMutex};
+    for (auto const &it : clients) {
+        it.second->sendControlMessage(control);
+    }
+}
+
 std::shared_ptr<Client> ConnectionManager::getClient(uint8_t localPort) {
     std::unique_lock<std::mutex> lock{connectionsMutex};
 

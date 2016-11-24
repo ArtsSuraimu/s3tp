@@ -44,13 +44,10 @@ public:
     ~S3TP();
     int init(TRANSCEIVER_CONFIG * config);
     int stop();
-    int sendToLinkLayer(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts);
-    Client * getClientConnectedToPort(uint8_t port);
+    std::shared_ptr<Client> getClientConnectedToPort(uint8_t port);
     void cleanupClients();
 
 private:
-    std::thread assemblyThread;
-    std::condition_variable assemblyCond;
     std::mutex s3tpMutex;
     bool active;
     Transceiver::Backend * transceiver;
@@ -61,18 +58,12 @@ private:
 
     //TxModule
     TxModule tx;
-    int fragmentPayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts);
-    int sendSimplePayload(uint8_t channel, uint8_t port, void * data, size_t len, uint8_t opts);
     //RxModule
     RxModule rx;
-    void assemblyRoutine();
 
     //Clients
-    std::map<uint8_t, Client*> clients;
     std::mutex clientsMutex;
     std::vector<uint8_t> disconnectedClients;
-    int checkTransmissionAvailability(uint8_t port, uint8_t channel, uint16_t msg_len);
-    void notifyAvailabilityToClients();
     virtual void onApplicationDisconnected(void *params);
     virtual void onApplicationConnected(void *params);
     virtual int onApplicationMessage(void * data, size_t len, void * params);
