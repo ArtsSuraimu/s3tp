@@ -4,14 +4,6 @@
 
 #include "ConnectionManager.h"
 
-std::shared_ptr<Connection> ConnectionManager::getConnection(uint8_t localPort) {
-    connectionsMutex.lock();
-    std::shared_ptr<Connection> connection = openConnections[localPort];
-    connectionsMutex.unlock();
-
-    return connection;
-}
-
 bool ConnectionManager::handleNewConnection(S3TP_PACKET * newConnectionRequest) {
     connectionsMutex.lock();
 
@@ -62,11 +54,15 @@ bool ConnectionManager::closeConnection(uint8_t srcPort) {
 }
 
 int ConnectionManager::openConnectionsCount() {
-    connectionsMutex.lock();
-    int openConnectionsCount = (int)openConnections.size();
-    connectionsMutex.unlock();
+    std::unique_lock<std::mutex> lock{connectionsMutex};
 
-    return openConnectionsCount;
+    return (int)openConnections.size();
+}
+
+std::shared_ptr<Client> ConnectionManager::getClient(uint8_t localPort) {
+    std::unique_lock<std::mutex> lock{connectionsMutex};
+
+    return clients[localPort];
 }
 
 /*
@@ -78,36 +74,4 @@ void ConnectionManager::setInPacketListener(InPacketListener * listener) {
 
 void ConnectionManager::setOutPacketListener(OutPacketListener * listener) {
     this->outListener = listener;
-}
-
-/*
- * Connection Listener callbacks
- */
-void ConnectionManager::onConnectionStatusChanged(Connection& connection) {
-    if (connection.getCurrentState() == Connection::DISCONNECTED) {
-        connectionsMutex.lock();
-        openConnections.erase(connection.getSourcePort());
-        connectionsMutex.unlock();
-    }
-    //TODO: other status to handle?
-}
-
-void ConnectionManager::onConnectionOutOfBandRequested(S3TP_PACKET * pkt) {
-
-}
-
-void ConnectionManager::onConnectionError(Connection& connection, std::string error) {
-
-}
-
-void ConnectionManager::onNewOutPacket(Connection& connection) {
-    if (outListener != nullptr) {
-        outListener->onNewOutPacket(connection);
-    }
-}
-
-void ConnectionManager::onNewInPacket(Connection& connection) {
-    if (inListener != nullptr) {
-        inListener->onNewInPacket(connection);
-    }
 }
