@@ -35,9 +35,7 @@ public:
     void startModule();
     void stopModule();
     bool isActive();
-    bool isNewMessageAvailable();
     void waitForNextAvailableMessage(std::mutex * callerMutex);
-    char * getNextCompleteMessage(uint16_t * len, int * error, uint8_t * port);
     void reset();
 private:
     bool active;
@@ -48,7 +46,7 @@ private:
     TransportInterface * transportInterface;
 
     //Delivery logic
-    std::set<uint8_t> availableMessages;
+    std::set<uint8_t> availableMessagesForPort;
     std::condition_variable availableMsgCond;
     std::thread deliveryThread;
     void deliveryRoutine();
@@ -56,9 +54,8 @@ private:
     // LinkCallback
     void handleFrame(bool arq, int channel, const void* data, int length);
     int handleReceivedPacket(S3TP_PACKET * packet);
-    int handleControlPacket(S3TP_HEADER * hdr, S3TP_CONTROL * control);
+    int handleControlPacket(S3TP_HEADER * hdr, char * payload);
     void handleLinkStatus(bool linkStatus);
-    bool isCompleteMessageForPortAvailable(uint8_t port);
 
     void onNewInPacket(Connection& connection);
 };

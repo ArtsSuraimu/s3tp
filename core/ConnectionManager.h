@@ -14,7 +14,6 @@ private:
     std::map<uint8_t, std::shared_ptr<Client>> clients;
     std::mutex connectionsMutex;
     InPacketListener * inListener;
-    OutPacketListener * outListener;
 
 public:
     ~ConnectionManager() {
@@ -25,14 +24,9 @@ public:
     bool handleNewConnection(S3TP_PACKET * newConnectionRequest);
     bool openConnection(uint8_t srcPort, uint8_t destPort, uint8_t virtualChannel, uint8_t options);
     bool closeConnection(uint8_t srcPort);
+    void closeAllConnections(bool forced);
     int openConnectionsCount();
     void setInPacketListener(InPacketListener * listener);
-    void setOutPacketListener(OutPacketListener * listener);
-
-    class OutPacketListener {
-    public:
-        virtual void onNewOutPacket(Connection& connection) = 0;
-    };
 
     class InPacketListener {
     public:

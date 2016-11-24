@@ -53,6 +53,13 @@ bool ConnectionManager::closeConnection(uint8_t srcPort) {
     return true;
 }
 
+void ConnectionManager::closeAllConnections(bool forced) {
+    for (auto client: clients) {
+        //TODO: make this forced
+        client.second->closeConnection();
+    }
+}
+
 int ConnectionManager::openConnectionsCount() {
     std::unique_lock<std::mutex> lock{connectionsMutex};
 
@@ -70,8 +77,4 @@ std::shared_ptr<Client> ConnectionManager::getClient(uint8_t localPort) {
  */
 void ConnectionManager::setInPacketListener(InPacketListener * listener) {
     this->inListener = listener;
-}
-
-void ConnectionManager::setOutPacketListener(OutPacketListener * listener) {
-    this->outListener = listener;
 }

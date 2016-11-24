@@ -12,15 +12,17 @@
 #include <sys/socket.h>
 #include "S3tpShared.h"
 #include "ClientInterface.h"
+#include "Connection.h"
 
-class Client {
+class Client : public ConnectionListener {
 private:
-    pthread_t client_thread;
-    pthread_mutex_t client_mutex;
+    std::thread clientThread;
+    std::mutex clientMutex;
     ClientInterface * client_if;
+    std::shared_ptr<Connection> connection;
 
     //Binding to port and unix socket
-    SOCKET socket;
+    Socket socket;
     bool bound;
     uint8_t app_port;
     uint8_t virtual_channel;
@@ -37,22 +39,31 @@ private:
     void disconnect();
     void listen();
 
+    int send(const void * data, size_t len);
     void clientRoutine();
-    static void * staticClientRoutine(void * args);
     int handleControlMessage();
 public:
-    Client(SOCKET socket, S3TP_CONFIG config, ClientInterface * listener);
+    Client(Socket socket, S3TP_CONFIG config, ClientInterface * listener);
     uint8_t getAppPort();
     uint8_t getVirtualChannel();
     uint8_t getOptions();
-    int send(const void * data, size_t len);
+    std::shared_ptr<Connection> getConnection();
+    void setConnection(std::shared_ptr<Connection> connection);
     int sendControlMessage(S3TP_CONNECTOR_CONTROL message);
+
     void kill();
     bool acceptConnect();
     void failedConnect();
     bool isConnected();
     bool isListening();
     void closeConnection();
+
+    //Connection Listener callbacks
+    void onConnectionStatusChanged(Connection& connection);
+    void onConnectionOutOfBandRequested(S3TP_PACKET * pkt);
+    void onConnectionError(Connection& connection, std::string error);
+    void onNewOutPacket(Connection& connection);
+    void onNewInPacket(Connection& connection);
 };
 
 #endif //S3TP_S3TP_CLIENT_H

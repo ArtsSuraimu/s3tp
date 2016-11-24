@@ -26,6 +26,7 @@ private:
     PriorityQueue<S3TP_PACKET *> outBuffer;
     PriorityQueue<S3TP_PACKET *> inBuffer;
     std::mutex connectionMutex;
+    std::condition_variable connectionCondition;
     STATE currentState;
     bool scheduledAcknowledgements [MAX_SEQUENCE_NUMBER];
     bool needsSelectiveAcknowledgement;
@@ -71,6 +72,7 @@ public:
     bool isInBufferFull();
     uint8_t getSourcePort();
     uint8_t getDestinationPort();
+    void waitForAvailableInMessage();
 
     S3TP_PACKET * peekNextOutPacket();
     S3TP_PACKET * getNextOutPacket();

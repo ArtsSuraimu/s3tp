@@ -311,51 +311,40 @@ bool Connection::canWriteBytesIn(int bytes) {
 }
 
 uint8_t Connection::getSourcePort() {
-    connectionMutex.lock();
-    uint8_t port = srcPort;
-    connectionMutex.unlock();
-
-    return port;
+    std::unique_lock<std::mutex> lock{connectionMutex};
+    return srcPort;
 }
 
 uint8_t Connection::getDestinationPort() {
-    connectionMutex.lock();
-    uint8_t port = dstPort;
-    connectionMutex.unlock();
+    std::unique_lock<std::mutex> lock{connectionMutex};
+    return dstPort;
+}
 
-    return port;
+void Connection::waitForAvailableInMessage() {
+    std::unique_lock<std::mutex> lock{connectionMutex};
+    connectionCondition.wait(lock);
 }
 
 S3TP_PACKET * Connection::peekNextOutPacket() {
-    outBuffer.lock();
     S3TP_PACKET * pkt = outBuffer.peek();
-    outBuffer.unlock();
 
     return pkt;
 }
 
 S3TP_PACKET * Connection::getNextOutPacket() {
-    outBuffer.lock();
     S3TP_PACKET * pkt = outBuffer.pop();
-    outBuffer.unlock();
 
     return pkt;
 }
 
 S3TP_PACKET * Connection::peekNextInPacket() {
-    inBuffer.lock();
     S3TP_PACKET * pkt = inBuffer.peek();
-    inBuffer.unlock();
 
     return pkt;
 }
 
 S3TP_PACKET * Connection::getNextInPacket() {
-    inBuffer.lock();
-    S3TP_PACKET * pkt = inBuffer.pop();
-    inBuffer.unlock();
-
-    return pkt;
+    return inBuffer.pop();
 }
 
 int Connection::sendOutPacket(S3TP_PACKET * pkt) {
@@ -383,9 +372,7 @@ int Connection::sendOutPacket(S3TP_PACKET * pkt) {
         hdr->ack = expectedInSequence;
     }
 
-    outBuffer.lock();
     outBuffer.push(pkt, this);
-    outBuffer.unlock();
     if (connectionListener != nullptr) {
         connectionListener->onNewOutPacket(*this);
     }

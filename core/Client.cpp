@@ -4,7 +4,7 @@
 
 #include "Client.h"
 
-Client::Client(SOCKET socket, S3TP_CONFIG config, ClientInterface * listener) {
+Client::Client(Socket socket, S3TP_CONFIG config, ClientInterface * listener) {
     this->socket = socket;
     this->app_port = config.port;
     this->virtual_channel = config.channel;
@@ -14,17 +14,14 @@ Client::Client(SOCKET socket, S3TP_CONFIG config, ClientInterface * listener) {
     this->listening = false;
     this->connected = false;
     this->connecting = false;
-    pthread_mutex_init(&client_mutex, NULL);
-    pthread_create(&client_thread, NULL, staticClientRoutine, this);
     //Notify listener that Client is now connected
     client_if->onApplicationConnected(this);
 }
 
 bool Client::isBound() {
-    pthread_mutex_lock(&client_mutex);
-    bool result = bound;
-    pthread_mutex_unlock(&client_mutex);
-    return result;
+    std::unique_lock<std::mutex> lock{clientMutex};
+
+    return bound;
 }
 
 uint8_t Client::getAppPort() {
@@ -39,6 +36,18 @@ uint8_t Client::getOptions() {
     return options;
 }
 
+std::shared_ptr<Connection> Client::getConnection() {
+    std::unique_lock<std::mutex> lock{clientMutex};
+
+    return connection;
+}
+
+void Client::setConnection(std::shared_ptr<Connection> connection) {
+    std::unique_lock<std::mutex> lock{clientMutex};
+
+    this->connection = connection;
+}
+
 /**
  * During communication, a socket error was encountered.
  * We forcefully close/unbind the domain socket, then notify listeners that the connection was closed.
@@ -46,7 +55,7 @@ uint8_t Client::getOptions() {
  * hence that needs to be handled separately.
  */
 void Client::unbind() {
-    pthread_mutex_lock(&client_mutex);
+    std::unique_lock<std::mutex> lock{clientMutex};
     if (bound) {
         shutdown(socket, SHUT_RDWR);
         close(socket);
@@ -54,7 +63,6 @@ void Client::unbind() {
         LOG_DEBUG(std::string("Closed socket " + std::to_string(socket)));
     }
     bound = false;
-    pthread_mutex_unlock(&client_mutex);
     //Notifying s3tp that a port is available again
     if (client_if != NULL) {
         client_if->onApplicationDisconnected(this);
@@ -68,14 +76,13 @@ void Client::unbind() {
  * hence that needs to be handled separately.
  */
 void Client::handleUnbind() {
-    pthread_mutex_lock(&client_mutex);
+    std::unique_lock<std::mutex> lock{clientMutex};
     if (bound) {
         close(socket);
 
         LOG_DEBUG(std::string("Closed socket " + std::to_string(socket)));
     }
     bound = false;
-    pthread_mutex_unlock(&client_mutex);
     //Notifying s3tp that a port is available again
     if (client_if != NULL) {
         client_if->onApplicationDisconnected(this);
@@ -87,12 +94,11 @@ void Client::handleUnbind() {
  * If the connection can be established, the client will be allowed to transmit data.
  */
 void Client::tryConnect() {
-    pthread_mutex_lock(&client_mutex);
+    std::unique_lock<std::mutex> lock{clientMutex};
     connecting = true;
     if (client_if != NULL) {
         client_if->onConnectToHost(this);
     }
-    pthread_mutex_unlock(&client_mutex);
 }
 
 /**
@@ -101,12 +107,11 @@ void Client::tryConnect() {
  * as it will be carried out seamlessly by s3tp.
  */
 void Client::disconnect() {
-    pthread_mutex_lock(&client_mutex);
+    std::unique_lock<std::mutex> lock{clientMutex};
     connected = false;
     if (client_if != NULL) {
         client_if->onDisconnectFromHost(this);
     }
-    pthread_mutex_unlock(&client_mutex);
 }
 
 /**
@@ -114,20 +119,21 @@ void Client::disconnect() {
  * If not listening, any incoming connections from the remote host will be dropped.
  */
 void Client::listen() {
-    pthread_mutex_lock(&client_mutex);
+    std::unique_lock<std::mutex> lock{clientMutex};
     listening = true;
-    pthread_mutex_unlock(&client_mutex);
 }
 
 void Client::kill() {
-    if (!isBound()) {
+    if (!isBound() && clientThread.joinable()) {
         //Just waiting for thread to finish (if not finished already)
-        pthread_join(client_thread, NULL);
+        clientThread.join();
         return;
     }
     //Kill thread and wait for it to finish
     unbind();
-    pthread_join(client_thread, NULL);
+    if (clientThread.joinable()) {
+        clientThread.join();
+    }
 }
 
 int Client::send(const void * data, size_t len) {
@@ -291,7 +297,7 @@ void Client::clientRoutine() {
             control.error = (S3tpError) result;
         } else {
             LOG_DEBUG(std::string("Sending ack to port " + std::to_string((int)app_port)));
-            control.controlMessageType = ACK;
+            //control.controlMessageType = ACK;
             control.error = 0;
         }
         sendControlMessage(control);
@@ -333,11 +339,6 @@ int Client::handleControlMessage() {
     return (int)rd;
 }
 
-void * Client::staticClientRoutine(void * args) {
-    static_cast<Client *>(args)->clientRoutine();
-    return NULL;
-}
-
 /**
  * Accepting a remote connection request. Can only be accepted if the local host
  * is currently listening on the given port (i.e., if an application is currently
@@ -347,22 +348,18 @@ void * Client::staticClientRoutine(void * args) {
  */
 bool Client::acceptConnect() {
     bool conn;
+    std::unique_lock<std::mutex> lock{clientMutex};
 
-    pthread_mutex_lock(&client_mutex);
     if (!listening) {
-        pthread_mutex_unlock(&client_mutex);
         return false;
     }
-    pthread_mutex_unlock(&client_mutex);
     S3TP_CONNECTOR_CONTROL msg;
     msg.error = 0;
     msg.controlMessageType = AppControlMessageType::CONN_UP;
 
     conn = sendControlMessage(msg) >= 0;
-    pthread_mutex_lock(&client_mutex);
     connecting = false;
     connected = conn;
-    pthread_mutex_unlock(&client_mutex);
     return conn;
 }
 
@@ -371,14 +368,13 @@ bool Client::acceptConnect() {
  * hence no new connection to the remote host was established.
  */
 void Client::failedConnect() {
-    pthread_mutex_lock(&client_mutex);
+    std::unique_lock<std::mutex> lock{clientMutex};
+
     if (!listening) {
-        pthread_mutex_unlock(&client_mutex);
         return;
     }
     connecting = false;
     connected = false;
-    pthread_mutex_unlock(&client_mutex);
     S3TP_CONNECTOR_CONTROL msg;
     msg.error = 0;
     msg.controlMessageType = AppControlMessageType::CONN_DOWN;
@@ -391,10 +387,9 @@ void Client::failedConnect() {
  * @return  Returns true if a logical connection with the remote host is currently active, false otherwise.
  */
 bool Client::isConnected() {
-    pthread_mutex_lock(&client_mutex);
-    bool result = connected;
-    pthread_mutex_unlock(&client_mutex);
-    return result;
+    std::unique_lock<std::mutex> lock{clientMutex};
+
+    return connected;
 }
 
 /**
@@ -403,25 +398,50 @@ bool Client::isConnected() {
  * @return  Returns true if the application is listening on the given port, false otherwise.
  */
 bool Client::isListening() {
-    pthread_mutex_lock(&client_mutex);
-    bool result = listening;
-    pthread_mutex_unlock(&client_mutex);
-    return result;
+    std::unique_lock<std::mutex> lock{clientMutex};
+
+    return listening;
 }
 
 /**
  * Notifies the client/application that a logical connection was closed by the remote host.
  */
 void Client::closeConnection() {
-    pthread_mutex_lock(&client_mutex);
+    std::unique_lock<std::mutex> lock{clientMutex};
     if (!connected) {
-        pthread_mutex_unlock(&client_mutex);
         return;
     }
     connected = false;
-    pthread_mutex_unlock(&client_mutex);
     S3TP_CONNECTOR_CONTROL msg;
     msg.error = 0;
     msg.controlMessageType = AppControlMessageType::CONN_DOWN;
     sendControlMessage(msg);
+}
+
+/*
+ * Connection Listener callbacks
+ */
+void Client::onConnectionStatusChanged(Connection& connection) {
+    //TODO: implement all that
+}
+
+void Client::onConnectionOutOfBandRequested(S3TP_PACKET * pkt) {
+
+}
+
+void Client::onConnectionError(Connection& connection, std::string error) {
+
+}
+
+void Client::onNewOutPacket(Connection& connection) {
+
+}
+
+void Client::onNewInPacket(Connection& connection) {
+    if (this->connection != nullptr) {
+        while (this->connection->inPacketsAvailable()) {
+            S3TP_PACKET * pkt = this->connection->getNextInPacket();
+            send(pkt->getPayload(), pkt->getHeader()->getPduLength());
+        }
+    }
 }
